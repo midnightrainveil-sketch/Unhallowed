@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UNHALLOWED</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- 3D scene -->
+<div id="stage">
+  <canvas id="scene" tabindex="-1"></canvas>
+  <div id="damage-vignette"></div>
+  <div id="edge-markers"></div>
+</div>
+
+<!-- Gameplay HUD -->
+<div id="hud" class="hidden">
+  <div id="hud-wave">
+    <div class="wave-rule"></div>
+    <div id="wave-label">Wave I</div>
+    <div id="wave-remaining">3 remain</div>
+    <div class="wave-rule"></div>
+  </div>
+
+  <div id="hud-vitals">
+    <div id="portrait" class="portrait"><div class="portrait-img"></div><div class="portrait-flash"></div></div>
+    <div id="vitals-body">
+      <div id="vitals-name">VAUST</div>
+      <div id="hp-bar"><div id="hp-lag"></div><div id="hp-fill"></div><div id="hp-ticks"></div></div>
+      <div id="hp-text">150 / 150</div>
+      <div id="dodge-pips">
+        <div class="pip"><div class="pip-fill"></div></div>
+        <div class="pip"><div class="pip-fill"></div></div>
+        <div class="pip"><div class="pip-fill"></div></div>
+        <span class="pip-label">SHIFT</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="skillbar"></div>
+
+  <div id="controls-hint">
+    <div><b>WASD</b> move</div>
+    <div><b>Mouse</b> aim</div>
+    <div><b>LMB</b> attack (hold)</div>
+    <div><b>Shift</b> dodge</div>
+    <div><b>Q E R T Y</b> skills</div>
+    <div class="hint-sub">E / T: hold to aim, release to cast</div>
+    <div><b>Esc</b> pause</div>
+  </div>
+
+  <div id="banner"><div id="banner-title"></div><div id="banner-sub"></div></div>
+</div>
+
+<!-- Title screen -->
+<div id="title-screen">
+  <div id="title-bg"></div>
+  <div id="title-mist"><div class="mist-a"></div><div class="mist-b"></div></div>
+  <canvas id="title-motes"></canvas>
+  <div id="title-shade"></div>
+  <div id="title-block">
+    <h1 id="title-word">UNHALLOWED</h1>
+    <div id="title-rule"><span></span><i></i><span></span></div>
+    <div id="title-buttons">
+      <button id="btn-play" class="btn btn-primary" disabled>Loading…</button>
+      <button id="btn-vaust" class="btn btn-small" aria-haspopup="dialog">
+        <span class="mini-portrait portrait-img"></span>Vaust
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Character panel -->
+<div id="char-panel" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="char-name">
+  <div class="panel char-card">
+    <button class="close-btn" id="char-close" aria-label="Close">&#x2715;</button>
+    <div class="char-art"><img src="assets/CharSplashFull.png" alt="Vaust, full character artwork"></div>
+    <div class="char-text">
+      <div class="char-kicker">The Sealed</div>
+      <h2 id="char-name">Vaust</h2>
+      <div class="ornament"><span></span><i></i><span></span></div>
+      <p>An ancient war-mage held beneath a seal as terrible as the power it restrains.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Upgrade choice -->
+<div id="upgrade-overlay" class="overlay hidden">
+  <div class="overlay-inner">
+    <div class="overlay-kicker" id="upgrade-kicker">Wave I endured</div>
+    <h2 class="overlay-title">Choose a Gift of the Seal</h2>
+    <div id="upgrade-cards"></div>
+    <div class="overlay-foot">Press <b>1</b> <b>2</b> <b>3</b> or click a card</div>
+  </div>
+</div>
+
+<!-- Pause -->
+<div id="pause-overlay" class="overlay hidden">
+  <div class="overlay-inner narrow">
+    <h2 class="overlay-title">Paused</h2>
+    <div class="ornament"><span></span><i></i><span></span></div>
+    <div class="menu-col">
+      <button class="btn btn-primary" id="btn-resume">Resume</button>
+      <button class="btn" id="btn-restart-p">Restart</button>
+      <button class="btn" id="btn-title-p">Title</button>
+    </div>
+    <div class="pause-controls">
+      WASD move &middot; Mouse aim &middot; LMB attack &middot; Shift dodge &middot; Q E R T Y skills<br>
+      E and T: hold to preview the area, release to cast &middot; Right-click cancels
+    </div>
+  </div>
+</div>
+
+<!-- Death / Victory -->
+<div id="end-overlay" class="overlay hidden">
+  <div class="overlay-inner narrow">
+    <div class="overlay-kicker" id="end-kicker"></div>
+    <h2 class="overlay-title" id="end-title"></h2>
+    <div class="ornament"><span></span><i></i><span></span></div>
+    <p id="end-text"></p>
+    <div class="menu-col">
+      <button class="btn btn-primary" id="btn-restart-e">Restart</button>
+      <button class="btn" id="btn-title-e">Title</button>
+    </div>
+  </div>
+</div>
+
+<div id="error-box" class="hidden"></div>
+
+<script src="vendor/three-r170.min.js"></script>
+<script src="js/core.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/materials.js"></script>
+<script src="js/world.js"></script>
+<script src="js/hands.js"></script>
+<script src="js/vaust.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/enemies.js"></script>
+<script src="js/skills.js"></script>
+<script src="js/player.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

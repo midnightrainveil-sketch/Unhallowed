@@ -265,7 +265,7 @@
     };
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2 + rnd() * 0.3;
-      branch(S / 2 + Math.cos(a) * 20, S / 2 + Math.sin(a) * 20, a, 200 + rnd() * 50, 4, 2);
+      branch(S / 2 + Math.cos(a) * 20, S / 2 + Math.sin(a) * 20, a, 200 + rnd() * 50, 2.6, 2);
     }
     return new T.CanvasTexture(c);
   }
@@ -307,18 +307,18 @@
   // ---------- Materials ----------
   U.buildMaterials = function () {
     const m = {};
-    m.clothBlack = std({ color: 0x0d0d11, roughness: 0.93, metalness: 0.0 }, 0.5, 2.4);
-    m.clothBlackDS = std({ color: 0x0d0d11, roughness: 0.93, side: T.DoubleSide }, 0.45, 2.4);
-    m.clothChar = std({ color: 0x1e1e25, roughness: 0.9, side: T.DoubleSide }, 0.45, 2.4);
+    m.clothBlack = std({ color: 0x0d0d11, roughness: 0.93, metalness: 0.0 }, 0.85, 2.8);
+    m.clothBlackDS = std({ color: 0x0d0d11, roughness: 0.93, side: T.DoubleSide }, 0.8, 2.8);
+    m.clothChar = std({ color: 0x1e1e25, roughness: 0.9, side: T.DoubleSide }, 0.75, 2.8);
     m.clothInner = std({ color: 0x15151a, roughness: 0.95 }, 0.35, 2.6);
     m.tabard = std({ color: 0xffffff, map: U.tex.tabard, roughness: 0.82, side: T.DoubleSide }, 0.35, 2.4);
     m.coatBack = std({ color: 0xffffff, map: U.tex.coatBack, roughness: 0.9, side: T.DoubleSide }, 0.45, 2.4);
     m.silver = std({ color: 0xd6d8e0, roughness: 0.28, metalness: 0.92, envMapIntensity: 1.3 }, 0.55, 2.0);
     m.darkMetal = std({ color: 0x34343c, roughness: 0.38, metalness: 0.85, envMapIntensity: 0.9 }, 0.45, 2.2);
-    m.leather = std({ color: 0x141418, roughness: 0.65, metalness: 0.15 }, 0.45, 2.4);
-    m.hair = std({ color: 0x0a0a0d, roughness: 0.5, metalness: 0.15, envMapIntensity: 0.6 }, 0.75, 2.2);
+    m.leather = std({ color: 0x141418, roughness: 0.65, metalness: 0.15 }, 0.7, 2.6);
+    m.hair = std({ color: 0x0a0a0d, roughness: 0.5, metalness: 0.15, envMapIntensity: 0.6 }, 0.6, 3.2);
     m.maskDark = std({ color: 0x101014, roughness: 0.5, metalness: 0.5 }, 0.3, 2.4);
-    m.eye = new T.MeshBasicMaterial({ color: new T.Color(2.2, 2.3, 2.6) });
+    m.eye = new T.MeshBasicMaterial({ color: new T.Color(1.2, 1.25, 1.4) });
     m.blade = std({ color: 0xe4e6ee, roughness: 0.18, metalness: 0.95, envMapIntensity: 1.6 }, 0.8, 1.8);
 
     // stone

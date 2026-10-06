@@ -420,10 +420,10 @@
         outline += exp(-pow(sideD / 0.04, 2.0)) * (1.0 - smoothstep(uR, uR + 0.05, d)) * step(0.15, d);
       }
       float front = uProgress * uR;
-      float fill = inside * (1.0 - smoothstep(front - 0.02, front, d)) * 0.28;
+      float fill = inside * (1.0 - smoothstep(front - 0.02, front, d)) * 0.2;
       float frontLine = inside * exp(-pow((d - front) / 0.05, 2.0)) * 0.7;
       float pulse = 0.85 + 0.15 * sin(uTime * 18.0);
-      float a = (outline * (0.55 + 0.45 * uLocked) * pulse + fill + frontLine + inside * 0.05) * uOpacity;
+      float a = (outline * (0.55 + 0.45 * uLocked) * pulse + fill + frontLine + inside * 0.035) * uOpacity;
       if (a < 0.003) discard;
       gl_FragColor = vec4(uColor * (1.0 + uLocked * 0.4), a);
     }`;

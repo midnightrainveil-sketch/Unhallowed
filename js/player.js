@@ -12,7 +12,7 @@
     maxHp: 150, speed: 5.6, radius: 0.4,
     dodgeDist: 5.0, dodgeDur: 0.28, dodgeIframe: 0.2, dodgeRecharge: 3.0, maxCharges: 3,
     hurtProtect: 0.6,
-    s1Dmg: 16, s1Range: 2.7, s2Dmg: 25, s2Range: 2.95, handDmg: 10,
+    s1Dmg: 16, s1Range: 2.2, s2Dmg: 25, s2Range: 2.4, handDmg: 10,
     comboReset: 0.45,
   };
 
@@ -42,7 +42,7 @@
     P.buffer = null; // buffered skill during dodge
     P.upgrades.widen = 0; P.upgrades.hands = 0; P.upgrades.absence = 0;
     P.lastMove = new V3(0, 0, -1);
-    P.rig.reset(P.pos);
+    P.rig.reset(P.pos, P.facing);
     P.rig.setVisible(true);
     P.stepT = 0;
   };
@@ -103,9 +103,9 @@
       const p = U.clamp(d.t / Tn.dodgeDur, 0, 1);
       const e = 1 - Math.pow(1 - p, 3);
       const target = _tmp.copy(d.from).addScaledVector(d.dir, Tn.dodgeDist * e);
+      clampArena(target, P.radius);
       P.vel.copy(target).sub(P.pos).divideScalar(Math.max(dt, 1e-4));
       P.pos.copy(target);
-      clampArena(P.pos, P.radius);
       // afterimages and a trailing white wake
       d.ghostT -= dt;
       if (d.ghostT <= 0 && p < 0.85) { d.ghostT = 0.05; FX.afterimage(0.55 * (1 - p * 0.6), 0.36); }
@@ -140,12 +140,17 @@
         const d = Math.hypot(dx, dz), min = P.radius + e.radius;
         if (d < min && d > 1e-4) { P.pos.x += (dx / d) * (min - d); P.pos.z += (dz / d) * (min - d); }
       }
+      clampArena(P.pos, P.radius); // enemies can never push Vaust past the rim
       // facing follows the cursor; locked during the active part of a swing
       const locked = P.attack && P.attack.t >= U.SLASH[P.attack.kind].dur * U.SLASH[P.attack.kind].a && P.attack.t < U.SLASH[P.attack.kind].dur * U.SLASH[P.attack.kind].b;
       if (!locked) P.facing = U.dampAngle(P.facing, aimYaw, 28, dt);
     }
 
-    if (P.buffer) { P.buffer.t -= dt; if (P.buffer.t <= 0) P.buffer = null; }
+    if (P.buffer) {
+      const heavyHold = P.gesture && (P.gesture.kind === 'R' || P.gesture.kind === 'Y') && P.gesture.t < P.gesture.holdT;
+      if (!P.dodge && !heavyHold) { const b = P.buffer; P.buffer = null; castSkill(b.key); }
+      else { P.buffer.t -= dt; if (P.buffer.t <= 0) P.buffer = null; }
+    }
 
     // ---- skills ----
     handleSkills(dt);
@@ -153,10 +158,11 @@
     // ---- basic attack ----
     P.comboTimer += dt;
     const busy = P.gesture && (P.gesture.kind === 'R' || P.gesture.kind === 'Y') && P.gesture.t < P.gesture.holdT;
+    if ((P.dodge || busy) && IN.mouse.pressed) P.queued = true; // a click during a dodge attacks right after it
     if (!P.dodge && !busy) {
       const want = IN.mouse.down || IN.mouse.pressed;
       if (!P.attack) {
-        if (want) startAttack(aimYaw);
+        if (want || P.queued) startAttack(aimYaw);
       } else {
         const S = U.SLASH[P.attack.kind];
         const p = P.attack.t / S.dur;
@@ -228,7 +234,7 @@
     if (!P.alive || !S.ready(key)) return;
     if (P.dodge) { P.buffer = { key, t: 0.3 }; return; }
     const heavy = key === 'R' || key === 'Y';
-    if (P.gesture && (P.gesture.kind === 'R' || P.gesture.kind === 'Y') && P.gesture.t < P.gesture.holdT) { P.buffer = { key, t: 0.4 }; return; }
+    if (P.gesture && (P.gesture.kind === 'R' || P.gesture.kind === 'Y') && P.gesture.t < P.gesture.holdT) { P.buffer = { key, t: P.gesture.holdT - P.gesture.t + 0.2 }; return; }
     if (heavy && P.attack) { FX.crescentRelease(P.attack.cres); P.attack = null; }
     // face the cursor immediately for directional casts
     P.facing = Math.atan2(P.aim.x - P.pos.x, P.aim.z - P.pos.z);
@@ -263,7 +269,7 @@
     if (p >= S.a && !a.swung) {
       a.swung = true;
       P.rig.root.updateMatrixWorld(true);
-      a.cres = FX.crescent(S, P.rig.body.matrixWorld, heavy ? { inner: 0.2, outer: 1.22, bright: 1.25, fadeTime: 0.2 } : { inner: 0.38, outer: 1.18, bright: 1.0, fadeTime: 0.14 });
+      a.cres = FX.crescent(S, P.rig.body.matrixWorld, heavy ? { inner: 0.25, outer: 1.78, bright: 1.25, fadeTime: 0.2 } : { inner: 0.45, outer: 1.6, bright: 1.0, fadeTime: 0.14 });
       a.swingYaw = P.facing;
       U.audio.play(heavy ? 'swing2' : 'swing1');
       if (heavy) {
@@ -288,7 +294,7 @@
         if (a.hit.has(en) || !en.alive) continue;
         const dx = en.pos.x - P.pos.x, dz = en.pos.z - P.pos.z;
         const d = Math.hypot(dx, dz);
-        if (d > range + en.radius) continue;
+        if (d > range + en.radius * 0.6) continue;
         const rel = U.angleDiff(a.swingYaw, Math.atan2(dx, dz));
         if ((rel >= lo && rel <= hi) || (d < 1.0 + en.radius && Math.abs(rel) < 1.2 && k > 0.4)) {
           a.hit.add(en);

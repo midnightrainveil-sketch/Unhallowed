@@ -18,7 +18,7 @@
       const tipShape = o.tip || [0.03, -0.09, 0.02, -0.13, 0.04];
       for (let r = 0; r < rows; r++) {
         const t = r / (rows - 1);
-        const hw = (o.w / 2) * (1 + (o.flare || 0.25) * t);
+        const hw = (o.w / 2) * (1 + (o.flare || 0.42) * t);
         for (let c = 0; c < cols; c++) {
           const u = c / (cols - 1);
           const x = (u - 0.5) * 2 * hw;
@@ -130,7 +130,7 @@
 
   function maskGeom() {
     const v = [
-      [0, 0.215, 0.05], [0.05, 0.1, 0.09], [-0.05, 0.1, 0.09], [0.09, 0.035, 0.052], [-0.09, 0.035, 0.052],
+      [0, 0.19, 0.072], [0.05, 0.1, 0.09], [-0.05, 0.1, 0.09], [0.09, 0.035, 0.052], [-0.09, 0.035, 0.052],
       [0.028, 0.04, 0.106], [-0.028, 0.04, 0.106], [0, -0.01, 0.127], [0.08, -0.06, 0.056], [-0.08, -0.06, 0.056],
       [0.04, -0.112, 0.086], [-0.04, -0.112, 0.086], [0, -0.185, 0.07], [0, 0.08, 0.107],
     ];
@@ -346,12 +346,12 @@
       // two-tier angular mantle with silver trim
       const drops1 = (a) => 0.05 * Math.pow(Math.abs(Math.sin(a)), 3) + 0.06 * Math.pow(Math.max(0, Math.cos(a)), 6);
       const drops2 = (a, i) => 0.06 * Math.pow(Math.abs(Math.sin(a)), 2) + (i % 2 ? 0.035 : 0) + 0.05 * Math.pow(Math.max(0, Math.cos(a)), 4);
-      const g2 = mantleGeom(0.12, 0.1, 0.25, 0.37, 0.22, 0.06, drops2, 16);
-      const g1 = mantleGeom(0.1, 0.09, 0.33, 0.31, 0.19, 0.15, drops1, 12);
+      const g2 = mantleGeom(0.12, 0.1, 0.25, 0.42, 0.24, 0.05, drops2, 16);
+      const g1 = mantleGeom(0.1, 0.09, 0.33, 0.35, 0.2, 0.15, drops1, 12);
       mesh(g2, m.clothChar, chest);
       mesh(g1, m.clothBlack, chest);
-      mesh(trimGeom(0.31, 0.19, 0.15, drops1, 12, 0.018), m.silver, chest);
-      mesh(trimGeom(0.37, 0.22, 0.06, drops2, 16, 0.014), m.darkMetal, chest);
+      mesh(trimGeom(0.35, 0.2, 0.15, drops1, 12, 0.018), m.silver, chest);
+      mesh(trimGeom(0.42, 0.24, 0.05, drops2, 16, 0.014), m.darkMetal, chest);
       // shoulder brooches
       for (const sx of [1, -1]) {
         mesh(new T.TorusGeometry(0.035, 0.009, 4, 8), m.silver, chest, sx * 0.17, 0.2, 0.12, -0.35, 0, 0);
@@ -376,7 +376,7 @@
       for (const c of coat) {
         const p = new ClothPanel(chest, {
           at: new V3(c.x, 0.2, -0.11 - Math.abs(c.x) * 0.1), yaw: c.yaw, w: c.w, len: c.len, mat: c.mat,
-          tiltOut: 0.08, flare: 0.35, tip: c.tip, curve: 1.6, drag: 0.09,
+          tiltOut: 0.11, flare: 0.55, tip: c.tip, curve: 1.6, drag: 0.09,
         });
         p.legInfluence = 0.25;
         p.isCoat = true;
@@ -394,14 +394,14 @@
       mesh(skull, m.clothBlack, head, 0, 0.0, 0.0);
       mesh(maskGeom(), m.silver, head, 0, 0, 0.0);
       mesh(diamondGeom(0.017, 0.032, 0.012), m.maskDark, head, 0, 0.078, 0.108);
-      mesh(U.taperGeom(0.1, 0.005, 0.003, 3), m.maskDark, head, 0, 0.19, 0.075, -0.3, 0, 0);
+      mesh(U.taperGeom(0.08, 0.005, 0.003, 3), m.maskDark, head, 0, 0.17, 0.085, -0.3, 0, 0);
       // eyes: narrow pale slits angled with the mask planes
       const eyeG = diamondGeom(0.019, 0.006, 0.003);
       mesh(eyeG, m.eye, head, 0.046, 0.016, 0.094, 0, 0.45, -0.18).castShadow = false;
       mesh(eyeG, m.eye, head, -0.046, 0.016, 0.094, 0, -0.45, 0.18).castShadow = false;
       // hair mass + spiky crown around the mask crest
-      const hm = new T.IcosahedronGeometry(0.125, 0); hm.scale(1.0, 1.05, 1.02);
-      mesh(hm, m.hair, head, 0, 0.035, -0.03);
+      const hm = new T.IcosahedronGeometry(0.125, 0); hm.scale(1.0, 1.15, 1.02);
+      mesh(hm, m.hair, head, 0, 0.05, -0.035);
       for (let i = 0; i < 7; i++) {
         const a = -1.25 + (i / 6) * 2.5;
         const spike = U.taperGeom(0.12 + Math.random() * 0.05, 0.03, 0.0, 4, 1, 0.6, false);
@@ -411,19 +411,20 @@
       // long angular hair clumps (2 segments each) with pendulum sway
       this.hair = [];
       const clumps = [];
-      for (let i = 0; i < 7; i++) {
-        const u = i / 6 - 0.5;
-        clumps.push({ x: u * 0.2, y: 0.07, z: -0.08, rx: 0.3 + Math.abs(u) * 0.2, rz: u * 0.6, len: 0.36 + (1 - Math.abs(u) * 1.4) * 0.22, r: 0.045 });
+      for (let i = 0; i < 9; i++) {
+        const u = i / 8 - 0.5;
+        clumps.push({ x: u * 0.24, y: 0.07, z: -0.085, rx: 0.26 + Math.abs(u) * 0.22, rz: u * 0.7, len: 0.5 + (1 - Math.abs(u) * 1.5) * 0.3 + (i % 2) * 0.05, r: 0.05 });
       }
       for (const sx of [1, -1]) {
-        clumps.push({ x: sx * 0.095, y: 0.03, z: 0.03, rx: -0.12, rz: sx * 0.12, len: 0.24, r: 0.032, front: true });
-        clumps.push({ x: sx * 0.105, y: 0.05, z: -0.02, rx: 0.05, rz: sx * 0.22, len: 0.3, r: 0.036 });
+        clumps.push({ x: sx * 0.095, y: 0.03, z: 0.03, rx: -0.14, rz: sx * 0.12, len: 0.34, r: 0.034, front: true });
+        clumps.push({ x: sx * 0.105, y: 0.05, z: -0.02, rx: 0.02, rz: sx * 0.24, len: 0.42, r: 0.04 });
+        clumps.push({ x: sx * 0.08, y: 0.08, z: -0.05, rx: 0.15, rz: sx * 0.4, len: 0.46, r: 0.042 });
       }
       for (const c of clumps) {
         const pivot = new T.Group(); pivot.position.set(c.x, c.y, c.z); head.add(pivot);
         mesh(U.taperGeom(c.len * 0.55, c.r, c.r * 0.75, 4, 1, 0.55), m.hair, pivot, 0, 0, 0, 0, Math.PI / 4, 0);
         const lower = new T.Group(); lower.position.y = -c.len * 0.55; pivot.add(lower);
-        mesh(U.taperGeom(c.len * 0.6, c.r * 0.75, 0.0, 4, 1, 0.55), m.hair, lower, 0, 0, 0, 0, Math.PI / 4, 0);
+        mesh(U.taperGeom(c.len * 0.6, c.r * 0.75, 0.0, 4, 1, 0.55), m.hair, lower, 0, 0, 0, 0, Math.PI / 4, 0).castShadow = false;
         const sw = new Swing(pivot, c.rx, c.rz, c.front ? 55 : 32, c.front ? 7 : 4.5, c.front ? 0.05 : 0.11);
         sw.child = lower; sw.childRestX = c.front ? 0.1 : 0.15;
         this.hair.push(sw);
@@ -475,26 +476,30 @@
         mesh(U.taperGeom(t.len, 0.004, 0.004, 3), m.silver, piv);
         mesh(new T.TorusGeometry(0.014, 0.004, 3, 6), m.silver, piv, 0, -t.len - 0.012, 0);
         mesh(new T.BoxGeometry(0.03, 0.085, 0.008), m.silver, piv, 0, -t.len - 0.07, 0);
-        U.mergeChildren(piv);
+        U.mergeChildren(piv, { castShadow: false });
         this.talismans.push(new Swing(piv, 0, 0, 30, 3.2, 0.09));
       }
 
       // collect meshes for afterimages
       this.meshList = [];
-      root.traverse((o) => { if (o.isMesh) this.meshList.push(o); });
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        if (o.geometry.boundingSphere.radius > 0.07) this.meshList.push(o);
+      });
 
       // --- spectral hands ---
       this.hands = [];
       const anchors = [
-        { p: new V3(-0.62, 2.0, -0.42), up: new V3(-0.45, 1, 0.05), palm: new V3(0.35, 0.1, 1), mirror: false },
-        { p: new V3(0.62, 2.0, -0.42), up: new V3(0.45, 1, 0.05), palm: new V3(-0.35, 0.1, 1), mirror: true },
-        { p: new V3(-0.88, 1.22, -0.18), up: new V3(-0.7, 0.75, 0.25), palm: new V3(0.45, 0.2, 1), mirror: false },
-        { p: new V3(0.88, 1.22, -0.18), up: new V3(0.7, 0.75, 0.25), palm: new V3(-0.45, 0.2, 1), mirror: true },
+        { p: new V3(-0.72, 2.08, -0.4), up: new V3(-0.45, 1, 0.05), palm: new V3(0.35, 0.1, 1), mirror: false },
+        { p: new V3(0.72, 2.08, -0.4), up: new V3(0.45, 1, 0.05), palm: new V3(-0.35, 0.1, 1), mirror: true },
+        { p: new V3(-1.0, 1.22, -0.14), up: new V3(-0.7, 0.75, 0.25), palm: new V3(0.45, 0.2, 1), mirror: false },
+        { p: new V3(1.0, 1.22, -0.14), up: new V3(0.7, 0.75, 0.25), palm: new V3(-0.45, 0.2, 1), mirror: true },
       ];
       anchors.forEach((a, i) => {
-        const h = new U.SpectralHand(scene, { mirror: a.mirror, opacity: 0.95, glow: 1.15 });
+        const h = new U.SpectralHand(scene, { mirror: a.mirror, opacity: 0.95, glow: 1.0, core: 0.42 });
         h.anchor = a;
-        h.baseScale = i < 2 ? 1.25 : 1.05;
+        h.baseScale = i < 2 ? 1.55 : 1.3;
         h.setScale(h.baseScale);
         h.ph = i * 1.7;
         h.gestT = 1 + Math.random() * 3;
@@ -813,7 +818,8 @@
           targetPos.copy(_lp);
           _u1.copy(a.up); _u1.x += Math.sin(t * 0.9 + h.ph) * 0.12;
           _u1.applyQuaternion(_qf);
-          _u2.copy(a.palm).applyQuaternion(_qf);
+          // palms turn toward the fixed camera so the open hands read clearly from above
+          _u2.copy(a.palm).applyQuaternion(_qf).normalize().lerp(_camFacing, 0.6);
           h.orient(_u1, _u2, targetQ);
           const fl = st.dodge ? 5 : 7.5;
           h.group.position.x = U.damp(h.group.position.x, targetPos.x, fl, dt);
@@ -821,7 +827,7 @@
           h.group.position.z = U.damp(h.group.position.z, targetPos.z, fl, dt);
           h.group.quaternion.slerp(targetQ, 1 - Math.exp(-6 * dt));
           h.setScale(U.damp(h.scale, h.baseScale, 6, dt));
-          h.setGlow(U.damp(h.mat.uniforms.uGlow.value, 1.15, 5, dt));
+          h.setGlow(U.damp(h.mat.uniforms.uGlow.value, 1.0, 5, dt));
           h.gestT -= dt;
           if (h.gestT <= 0) {
             h.gestT = 1.8 + Math.random() * 3.2;
@@ -858,14 +864,14 @@
       for (const h of this.hands) { h.group.visible = v; h.strand.visible = v; }
     }
 
-    reset(pos) {
+    reset(pos, facing) {
       this.phase = 0; this.runBlend = 0; this.hipYaw = 0; this.guard = 0; this.deadT = -1; this.handsAlpha = 1;
       this.turnRate = 0;
       for (const p of this.panels) { p.s.set(0, 0); p.v.set(0, 0); }
       for (const h of this.hair) { h.ax = h.az = h.vx = h.vz = h.cx = h.cz = h.cvx = h.cvz = 0; }
       for (const h of this.hands) {
         h.override = null; h.fade = 1;
-        h.group.position.copy(h.anchor.p).add(pos);
+        h.group.position.copy(h.anchor.p).applyAxisAngle(_up, facing || 0).add(pos);
         h.setScale(h.baseScale);
       }
     }
@@ -875,4 +881,5 @@
   const _gw = new V3(), _ed = new V3(), _zz = new V3(), _m4 = new T.Matrix4(), _lv = new V3();
   const _qf = new T.Quaternion(), _up = new V3(0, 1, 0), _cw = new V3(), _hp = new V3(), _hq = new T.Quaternion();
   const _lp = new V3(), _u1 = new V3(), _u2 = new V3(), _s0 = new V3(), _s1 = new V3();
+  const _camFacing = new V3(0, Math.sin(38 * Math.PI / 180), Math.cos(38 * Math.PI / 180));
 })(window.U);

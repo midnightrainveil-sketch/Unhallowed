@@ -112,12 +112,18 @@ window.U = window.U || {};
         self.mouse.ndcY = -(e.clientY / window.innerHeight) * 2 + 1;
       };
       window.addEventListener('pointermove', move, { passive: true });
-      canvas.addEventListener('pointerdown', (e) => {
-        move(e);
-        if (e.button === 0) { self.mouse.down = true; self.mouse.pressed = true; }
-        if (e.button === 2) self.mouse.rightPressed = true;
-      });
-      window.addEventListener('pointerup', (e) => { if (e.button === 0) self.mouse.down = false; });
+      // Pointer events fire down/up only for the first/last button of a chord, so track the button mask.
+      const buttons = (e, allowPress) => {
+        const left = (e.buttons & 1) !== 0, right = (e.buttons & 2) !== 0;
+        if (left && !self.mouse.down && allowPress) { self.mouse.pressed = true; self.mouse.down = true; }
+        if (!left) self.mouse.down = false;
+        if (right && !self.mouse.right && allowPress) self.mouse.rightPressed = true;
+        self.mouse.right = right;
+      };
+      canvas.addEventListener('pointerdown', (e) => { move(e); buttons(e, true); });
+      // chorded presses/releases arrive as pointermove; only presses over the game canvas count
+      window.addEventListener('pointermove', (e) => buttons(e, e.target === canvas), { passive: true });
+      window.addEventListener('pointerup', (e) => buttons(e, false));
       canvas.addEventListener('contextmenu', (e) => e.preventDefault());
       window.addEventListener('blur', () => self.clear());
       document.addEventListener('visibilitychange', () => { if (document.hidden) self.clear(); });
@@ -138,6 +144,7 @@ window.U = window.U || {};
         this.keys[k] = false;
       }
       this.mouse.down = false;
+      this.mouse.right = false;
     },
   };
 

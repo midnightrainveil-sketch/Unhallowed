@@ -21,7 +21,7 @@
     eRadius: 3.2, eRange: 12, eDmg: 18, eRoot: 1.7,
     rDmg: 72, rRange: 8.3, rHalf: 1.2, rWind: 0.55, rSwing: 0.12,
     tRadius: 4.5, tRange: 12, tDur: 4, tScale: 0.5,
-    yDmg: 115, yRadius: 8.4, yCharge: 1.0,
+    yDmg: 105, yRadius: 8.4, yCharge: 1.0,
   };
 
   S.cd = { Q: 0, E: 0, R: 0, T: 0, Y: 0 };
@@ -416,9 +416,9 @@
       const a = (i / n) * Math.PI * 2 + Math.random() * 0.2;
       hands.push({ h, a, delay: i * 0.02 + Math.random() * 0.05 });
       h.snapPose('reach');
-      h.setScale(1.55);
+      h.setScale(2.0);
       h.setOpacity(0);
-      h.setGlow(1.3);
+      h.setGlow(1.15);
       h.group.position.set(center.x + Math.sin(a) * R, -1.2, center.z + Math.cos(a) * R);
     }
     const grabbed = [];
@@ -513,6 +513,41 @@
     const bladeDir = (yaw, pitch, out) => out.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
     const c = {
       t: 0, done: false, swung: false, firstHit: false,
+      startSwing() {
+        if (this.swung) return;
+        this.swung = true;
+        U.audio.play('rSlash');
+        this.origin = P.pos.clone();
+        dropTele();
+        buildArc(S.rCres, pivot, yawStart, yawEnd, 2.3, 9.6);
+        buildArc(S.tear, pivot, yawStart, yawEnd, 8.0, 8.9);
+        S.rCres.mesh.visible = true;
+        S.rCres.mat.uniforms.uOpacity.value = 1;
+        S.rCres.mat.uniforms.uColor.value.setRGB(3.0, 3.05, 3.3);
+      },
+      // damage every enemy whose bearing the visible blade crossed between yaw a and b
+      sweep(a, b) {
+        const o = this.origin;
+        for (const en of U.enemies.list) {
+          if (hit.has(en) || !en.alive) continue;
+          const dx = en.pos.x - o.x, dz = en.pos.z - o.z;
+          const d = Math.hypot(dx, dz);
+          if (d > T_.rRange + en.radius) continue;
+          const ang = aimYaw + U.angleDiff(aimYaw, Math.atan2(dx, dz));
+          if (ang < Math.min(a, b) - 0.05 || ang > Math.max(a, b) + 0.05) continue;
+          hit.add(en);
+          const tang = _a.set(Math.cos(b), 0, -Math.sin(b)).multiplyScalar(-1);
+          const push = _b.set(dx, 0, dz).normalize().multiplyScalar(0.6).add(tang).normalize();
+          U.enemies.hit(en, T_.rDmg, { dir: push, knock: 8, heavy: true, stagger: 0.8 });
+          const hp = _c.copy(en.pos).setY(1.2);
+          FX.sparks(hp, 26, { speed: 9, dir: push, bias: 0.6, life: 0.4, size: 0.12, grav: 3 });
+          FX.shards(hp, 6, { bright: true, speed: 6, size: 0.1, life: 0.5, dir: push, bias: 0.5 });
+          FX.flash(hp, 16, 7, 0.25);
+          FX.fracture(hp, 1.4, 0.3);
+          U.audio.play('hit', { heavy: true, gap: 0.02 });
+          if (!this.firstHit) { this.firstHit = true; hitstopAndShake(0.085, 0.3); }
+        }
+      },
       update(dt) {
         const t = this.t, W = T_.rWind, SW = T_.rSwing;
         // pivot above and slightly behind Vaust, following him until the swing commits
@@ -536,44 +571,14 @@
           const k = U.clamp((t - W) / SW, 0, 1);
           const e = 1 - Math.pow(1 - k, 1.6);
           yaw = U.lerp(yawStart, yawEnd, e); pitch = -0.33;
-          if (!this.swung) {
-            this.swung = true;
-            U.audio.play('rSlash');
-            this.origin = P.pos.clone();
-            dropTele();
-            buildArc(S.rCres, pivot, yawStart, yawEnd, 2.3, 9.6);
-            buildArc(S.tear, pivot, yawStart, yawEnd, 8.0, 8.9);
-            S.rCres.mesh.visible = true;
-            S.rCres.mat.uniforms.uOpacity.value = 1;
-            S.rCres.mat.uniforms.uColor.value.setRGB(3.0, 3.05, 3.3);
-          }
+          this.startSwing();
           S.rCres.mat.uniforms.uHead.value = e;
           S.rCres.mat.uniforms.uTail.value = Math.max(0, e - 0.9);
-          // damage when the visible blade crosses each target
-          const o = this.origin;
-          for (const en of U.enemies.list) {
-            if (hit.has(en) || !en.alive) continue;
-            const dx = en.pos.x - o.x, dz = en.pos.z - o.z;
-            const d = Math.hypot(dx, dz);
-            if (d > T_.rRange + en.radius) continue;
-            const ang = aimYaw + U.angleDiff(aimYaw, Math.atan2(dx, dz));
-            if (ang >= Math.min(prevYaw, yaw) - 0.05 && ang <= Math.max(prevYaw, yaw) + 0.05) {
-              hit.add(en);
-              const tang = _a.set(Math.cos(yaw), 0, -Math.sin(yaw)).multiplyScalar(-1);
-              const push = _b.set(dx, 0, dz).normalize().multiplyScalar(0.6).add(tang).normalize();
-              U.enemies.hit(en, T_.rDmg, { dir: push, knock: 8, heavy: true, stagger: 0.8 });
-              const hp = _c.copy(en.pos).setY(1.2);
-              FX.sparks(hp, 26, { speed: 9, dir: push, bias: 0.6, life: 0.4, size: 0.12, grav: 3 });
-              FX.shards(hp, 6, { bright: true, speed: 6, size: 0.1, life: 0.5, dir: push, bias: 0.5 });
-              FX.flash(hp, 16, 7, 0.25);
-              FX.fracture(hp, 1.4, 0.3);
-              U.audio.play('hit', { heavy: true, gap: 0.02 });
-              if (!this.firstHit) { this.firstHit = true; hitstopAndShake(0.085, 0.3); }
-            }
-          }
+          this.sweep(prevYaw, yaw);
           prevYaw = yaw;
         } else {
           yaw = yawEnd; pitch = -0.33;
+          if (prevYaw < yawEnd) { this.startSwing(); this.sweep(prevYaw, yawEnd); prevYaw = yawEnd; S.rCres.mat.uniforms.uHead.value = 1; }
           const k = U.clamp((t - W - SW) / 0.45, 0, 1);
           op = 1 - U.smooth(k); sc = 1 + k * 0.08;
           if (!this.tore) {
@@ -743,7 +748,7 @@
           FX.ring({ pos: center, r0: 0.5, r1: T_.yRadius + 0.6, dur: 0.42, w0: 0.45, w1: 0.06, opacity: 1, intensity: 2.2, fill: 0.25, ease: U.easeOutCubic });
           FX.ring({ pos: center, r0: 0.3, r1: T_.yRadius * 0.72, dur: 0.7, w0: 0.2, w1: 0.03, opacity: 0.7, intensity: 1.4, ease: U.easeOutCubic });
           FX.ring({ pos: center, r0: T_.yRadius + 0.3, r1: T_.yRadius + 1.2, dur: 0.9, w0: 0.06, w1: 0.02, opacity: 0.5, ease: U.easeOutCubic });
-          FX.crack(center, T_.yRadius * 1.05, 1.6, 1.3);
+          FX.crack(center, T_.yRadius * 1.05, 1.15, 0.5);
           FX.flash(_a.copy(center).setY(2), 60, 18, 0.45);
           FX.shards(_a.copy(center).setY(1.4), 34, { bright: true, speed: 13, up: 0.35, size: 0.13, life: 0.8, spread: 1.0, grav: 4 });
           FX.shards(_a.copy(center).setY(0.2), 20, { speed: 9, up: 0.8, size: 0.16, life: 1.2, spread: 1.4, colors: [_stone1, _stone2] });
@@ -786,7 +791,12 @@
           for (const h of rig.hands) h.fade = U.clamp(rt < 0.1 ? 1 : 1 - (rt - 0.1) / 0.12, 0, 1) + U.clamp((rt - 0.7) / 0.6, 0, 1);
           if (rt > 0.15 && !this.reset) {
             this.reset = true;
-            for (let i = 0; i < 4; i++) { rig.hands[i].override = null; rig.hands[i].group.position.copy(P.pos).add(rig.hands[i].anchor.p); rig.hands[i].setScale(rig.hands[i].baseScale); }
+            for (let i = 0; i < 4; i++) {
+              const h = rig.hands[i];
+              h.override = null;
+              h.group.position.copy(h.anchor.p).applyAxisAngle(_yAxis, P.facing).add(P.pos);
+              h.setScale(h.baseScale);
+            }
             FX.shards(_a.copy(center).setY(1.5), 16, { bright: true, speed: 7, size: 0.1, life: 0.6, grav: 1 });
           }
           if (rt > 1.4) this.done = true;
@@ -801,5 +811,6 @@
     };
     return c;
   }
+  const _yAxis = new V3(0, 1, 0);
   const _stone1 = new T.Color(0.13, 0.13, 0.15), _stone2 = new T.Color(0.3, 0.3, 0.33);
 })(window.U);

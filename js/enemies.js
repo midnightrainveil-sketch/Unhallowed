@@ -118,11 +118,11 @@
   function buildPursuer() {
     const g = geoms();
     const mats = {
-      body: U.stdMat({ color: 0x1d1d23, roughness: 0.85, metalness: 0.1, emissive: 0x000000 }, 0.55, 2.3),
-      cloth: U.stdMat({ color: 0x111115, roughness: 0.95, side: T.DoubleSide, emissive: 0x000000 }, 0.45, 2.4),
-      mask: U.stdMat({ color: 0xcfc9bc, roughness: 0.55, metalness: 0.05, emissive: 0x000000 }, 0.35, 2.4),
+      body: U.stdMat({ color: 0x26262d, roughness: 0.8, metalness: 0.1, emissive: 0x000000 }, 0.9, 2.5),
+      cloth: U.stdMat({ color: 0x15151a, roughness: 0.95, side: T.DoubleSide, emissive: 0x000000 }, 0.7, 2.6),
+      mask: U.stdMat({ color: 0xd8d2c4, roughness: 0.5, metalness: 0.05, emissive: 0x000000 }, 0.5, 2.4),
       blade: U.stdMat({ color: 0x8e9098, roughness: 0.3, metalness: 0.9, emissive: 0x000000, envMap: U.world.envMap, envMapIntensity: 1.0 }, 0.6, 2.0),
-      eye: new T.MeshBasicMaterial({ color: new T.Color(1.6, 0.75, 0.35) }),
+      eye: new T.MeshBasicMaterial({ color: new T.Color(0.9, 0.92, 1.0) }),
     };
     const root = new T.Group();
     const body = new T.Group(); root.add(body);
@@ -175,11 +175,11 @@
       inner: new T.MeshBasicMaterial({ color: new T.Color(0.9, 0.25, 0.14), transparent: true, opacity: 0.0, blending: T.AdditiveBlending, depthWrite: false }),
       ring: U.stdMat({ color: 0x55565e, roughness: 0.35, metalness: 0.9, emissive: 0x000000, envMap: U.world.envMap }, 0.5, 2.0),
       frag: U.stdMat({ color: 0x1a1a20, roughness: 0.4, metalness: 0.6, emissive: new T.Color(0, 0, 0), envMap: U.world.envMap }, 0.6, 2.0),
-      eye: new T.MeshBasicMaterial({ color: new T.Color(1.2, 0.5, 0.25) }),
+      eye: new T.MeshBasicMaterial({ color: new T.Color(0.85, 0.88, 0.98) }),
       glow: new T.MeshBasicMaterial({ map: U.tex.glow, color: new T.Color(0.55, 0.22, 0.12), transparent: true, opacity: 0.6, blending: T.AdditiveBlending, depthWrite: false }),
     };
     const root = new T.Group();
-    const float = new T.Group(); float.position.y = IDOL.hover; root.add(float);
+    const float = new T.Group(); float.position.y = IDOL.hover; float.scale.setScalar(1.3); root.add(float);
     const core = addMesh(g.core, mats.core, float);
     const inner = addMesh(g.coreInner, mats.inner, float); inner.castShadow = false;
     const eye = addMesh(g.eye, mats.eye, float, 0, 0.08, 0.27); eye.castShadow = false;
@@ -225,7 +225,7 @@
       this.flash = 0; this.flinch = 0;
       this.rootT = 0; this.token = false;
       this.alive = true; this.active = true;
-      this.flank = (this.id % 2 ? 1 : -1) * (0.45 + Math.random() * 0.35);
+      this.flank = (this.id % 2 ? 1 : -1) * (0.8 + Math.random() * 0.35);
       this.strafeDir = Math.random() < 0.5 ? 1 : -1; this.strafeT = 2 + Math.random() * 2;
       this.cool = 1.0 + Math.random() * 1.2;
       this.nextAttack = Math.random() < 0.5 ? 'volley' : 'erupt';
@@ -282,7 +282,7 @@
     void gmat;
     // eruptions
     E.eruptions = [];
-    const smat = U.stdMat({ color: 0x17171b, roughness: 0.7, metalness: 0.3, emissive: new T.Color(0.32, 0.06, 0.04) }, 0.5, 2.0);
+    const smat = U.stdMat({ color: 0x17171b, roughness: 0.7, metalness: 0.3, emissive: new T.Color(0.16, 0.03, 0.022) }, 0.5, 2.0);
     for (let i = 0; i < 16; i++) {
       const grp = new T.Group();
       const spikes = [];
@@ -320,7 +320,21 @@
     return e;
   };
 
-  E.aliveCount = function () { return E.list.length; };
+  E.aliveCount = function () { let n = 0; for (const e of E.list) if (e.alive) n++; return n; };
+
+  // deactivate enemy projectiles and eruptions (used when a wave is cleared)
+  E.clearHazards = function () {
+    for (const p of E.projectiles) {
+      if (!p.active) continue;
+      FX.sparks(p.pos, 5, { speed: 2, color: FX.AMBER, life: 0.3, size: 0.08 });
+      p.active = false; p.grp.visible = false;
+    }
+    for (const er of E.eruptions) {
+      if (!er.active) continue;
+      if (er.tele) { er.tele.release(); er.tele = null; }
+      er.active = false; er.grp.visible = false;
+    }
+  };
 
   // damage an enemy. o: {dir (V3 push direction), knock, heavy, stagger, root, quiet}
   E.hit = function (e, dmg, o) {
@@ -367,8 +381,7 @@
     FX.flash(c, 14, 7, 0.3);
     U.audio.play('shatter', { gap: 0.05 });
     e.root.visible = false;
-    const i = E.list.indexOf(e);
-    if (i >= 0) E.list.splice(i, 1);
+    // removal from E.list is deferred to E.update so callers iterating the list never skip an enemy
     e.active = false;
     if (U.game) U.game.onEnemyKilled(e);
   };
@@ -380,8 +393,10 @@
   // ---------------- per-frame ----------------
   E.update = function (dt) {
     const P = U.player;
+    for (let i = E.list.length - 1; i >= 0; i--) if (!E.list[i].active) E.list.splice(i, 1);
     for (let i = E.list.length - 1; i >= 0; i--) {
       const e = E.list[i];
+      if (!e.active) continue;
       e.timeScale = U.skills.timeScaleAt(e.pos);
       const edt = dt * e.timeScale;
       e.animT += edt;
@@ -397,13 +412,13 @@
       e.pos.addScaledVector(e.knock, edt);
       e.knock.multiplyScalar(Math.exp(-7 * edt));
       for (const o of E.list) {
-        if (o === e) continue;
+        if (o === e || !o.active) continue;
         const dx = e.pos.x - o.pos.x, dz = e.pos.z - o.pos.z;
         const d = Math.hypot(dx, dz), min = e.radius + o.radius + 0.1;
         if (d < min && d > 1e-4) { const push = (min - d) * 0.5; e.pos.x += (dx / d) * push; e.pos.z += (dz / d) * push; }
       }
       // keep inside the courtyard
-      if (e.state !== 'arrive') U.arenaClamp(e.pos, e.radius);
+      U.arenaClamp(e.pos, e.radius);
       e.root.rotation.y = e.facing;
       // hit flash & slow tint
       const fl = e.flash * e.flash;
@@ -474,6 +489,7 @@
           mx += -dz / (dist || 1) * e.strafeDir * 1.4; mz += dx / (dist || 1) * e.strafeDir * 1.4;
           e.strafeT -= dt;
           if (e.strafeT <= 0) { e.strafeDir *= -1; e.strafeT = 1.5 + Math.random() * 2; }
+          if (e.st > 0.5 && E.attackers < E.maxAttackers) e.setState('approach');
         }
         const l = Math.hypot(mx, mz);
         if (l > 0.15) { moveX = mx / l; moveZ = mz / l; speed = C.speed * (e.state === 'strafe' ? 0.55 : U.clamp(ml / 1.5, 0.35, 1)); }
@@ -514,7 +530,7 @@
         const dur = n === 1 ? C.s1 : C.s2, lunge = n === 1 ? C.lunge1 : C.lunge2;
         e.facing = e.lockYaw;
         if (canMove) { const f = lunge / dur; e.pos.x += Math.sin(e.lockYaw) * f * dt; e.pos.z += Math.cos(e.lockYaw) * f * dt; }
-        if (e.tele) e.tele.mat.uniforms.uOpacity.value = 1.6;
+        if (e.tele) e.tele.mat.uniforms.uOpacity.value = 1.15;
         if (!e.didHit && e.st > dur * 0.35) {
           e.didHit = true;
           const reach = (n === 1 ? C.reach1 : C.reach2) + lunge * 0.5, half = n === 1 ? C.half1 : C.half2;
@@ -561,7 +577,7 @@
     const C = PURSUER;
     const reach = (n === 1 ? C.reach1 : C.reach2) + (n === 1 ? C.lunge1 : C.lunge2) * 0.5;
     e.clearTeles();
-    e.tele = FX.telegraph({ pos: e.pos, r: reach, half: n === 1 ? C.half1 : C.half2, yaw: e.facing, intensity: n === 1 ? 1 : 1.15 });
+    e.tele = FX.telegraph({ pos: e.pos, r: reach, half: n === 1 ? C.half1 : C.half2, yaw: e.facing, intensity: n === 1 ? 0.85 : 1.0 });
     e.lockYaw = e.facing; e.lockPos.copy(e.pos);
     U.audio.play('windup', { gap: 0.08 });
   }
@@ -639,7 +655,8 @@
     for (const st2 of r.strips) st2.piv.rotation.x = 0.15 + rb * 0.35 + Math.sin(t * 3 + st2.ph) * 0.06 + Math.max(0, lean) * 0.2;
     // amber edge glow during wind-ups (functional warning colour)
     r.mats.blade.emissive.setRGB(1.0 * Math.max(glowR, glowL), 0.42 * Math.max(glowR, glowL), 0.16 * Math.max(glowR, glowL));
-    r.mats.eye.color.setRGB(1.6 + Math.max(glowR, glowL) * 1.5, 0.75 + Math.max(glowR, glowL) * 0.5, 0.35);
+    const gl = Math.max(glowR, glowL);
+    r.mats.eye.color.setRGB(U.lerp(0.9, 2.6, gl), U.lerp(0.92, 1.1, gl), U.lerp(1.0, 0.4, gl));
   }
 
   // ---------------- Hex Idol behaviour ----------------
@@ -776,7 +793,7 @@
       if (!er) return;
       er.active = true; er.t = 0; er.phase = 0; er.delay = C.eruptDelay + i * 0.13; er.owner = e;
       er.pos.set(p.x, 0, p.z);
-      er.tele = FX.telegraph({ pos: er.pos, r: C.eruptR, color: FX.CRIMSON, intensity: 1.6 });
+      er.tele = FX.telegraph({ pos: er.pos, r: C.eruptR, color: FX.CRIMSON, intensity: 1.0 });
       er.grp.position.copy(er.pos);
     });
     FX.ring({ pos: e.pos, r0: 0.5, r1: 2.2, dur: 0.4, w0: 0.1, w1: 0.03, color: FX.AMBER, opacity: 0.6 });
@@ -789,16 +806,16 @@
     if (e.state === 'volleyWind') charge = U.clamp(e.st / C.volleyWind, 0, 1);
     else if (e.state === 'volleyMid') charge = 0.6 + 0.4 * U.clamp(e.st / C.volleyMid, 0, 1);
     else if (e.state === 'eruptWind') { charge = U.clamp(e.st / C.eruptWind, 0, 1); lift = charge * 0.5; spin = 4 * charge + 0.6; }
-    else if (e.state === 'stagger') { r.float.rotation.z = Math.sin(t * 30) * 0.2 * (1 - e.st / 0.5); }
+    else if (e.state === 'stagger') { r.float.rotation.z = Math.sin(t * 30) * 0.2 * (1 - U.clamp(e.st / (e.staggerDur || 0.5), 0, 1)); }
     if (e.state !== 'stagger') r.float.rotation.z = U.damp(r.float.rotation.z, 0, 6, dt);
     r.float.position.y = C.hover + Math.sin(t * 1.6) * 0.12 + lift - e.flinch * 0.15;
     r.core.rotation.y += dt * (0.4 + charge * 2);
     r.ring.rotation.z += dt * spin;
     r.ring2.rotation.z -= dt * spin * 0.7;
-    r.mats.inner.opacity = 0.15 + charge * 0.85;
-    r.mats.eye.color.setRGB(1.2 + charge * 1.6, 0.5 + charge * 0.5, 0.25 + charge * 0.15);
+    r.mats.inner.opacity = charge * 0.95;
+    r.mats.eye.color.setRGB(U.lerp(0.85, 2.6, charge), U.lerp(0.88, 1.0, charge), U.lerp(0.98, 0.4, charge));
     r.mats.frag.emissive.setRGB(charge * 0.7, charge * 0.25, charge * 0.08);
-    r.mats.glow.opacity = 0.35 + charge * 0.6;
+    r.mats.glow.opacity = charge * 0.9;
     const volley = e.state === 'volleyWind' || e.state === 'volleyMid';
     r.frags.forEach((f, i) => {
       f.a += dt * f.sp * (1 + charge * 2);
@@ -862,8 +879,8 @@
           FX.sparks(_tmp.copy(er.pos).setY(0.2), 16, { speed: 6, up: 3, color: FX.CRIMSON, life: 0.45, size: 0.11, grav: 9 });
           FX.shards(_tmp.copy(er.pos).setY(0.2), 7, { speed: 5, up: 2.5, size: 0.12, life: 0.9, colors: [COL.obsidian, COL.dark] });
           FX.mist(_tmp.copy(er.pos).setY(0.4), 4, { spread: 0.8, rise: 0.9, life: 0.9, size: 0.9, a: 0.22 });
-          FX.ring({ pos: er.pos, r0: 0.3, r1: C.eruptR + 0.4, dur: 0.3, w0: 0.12, w1: 0.03, color: FX.CRIMSON, opacity: 0.9, intensity: 1.6 });
-          FX.crack(er.pos, 1.6, 1.4, 0.55, FX.CRIMSON);
+          FX.ring({ pos: er.pos, r0: 0.3, r1: C.eruptR + 0.4, dur: 0.3, w0: 0.12, w1: 0.03, color: FX.CRIMSON, opacity: 0.8, intensity: 1.1 });
+          FX.crack(er.pos, 1.6, 1.1, 0.35, FX.CRIMSON);
           FX.flash(_tmp.copy(er.pos).setY(0.8), 6, 5, 0.25, FX.AMBER);
           U.audio.play('erupt', { gap: 0.06 });
           U.world.addShake(0.08);

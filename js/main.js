@@ -29,11 +29,15 @@
       U.player.init(scene);
       U.skills.init(scene);
       U.fx.initAfterimages(U.player.rig);
+      U.world.resize();
       U.ui.init();
       warmup();
       G.state = 'title';
       U.ui.setLoaded();
       IN.onKey(onKey);
+      // losing focus pauses the run (held inputs are already cleared by the input module)
+      window.addEventListener('blur', () => { if (G.state === 'playing') G.pause(); });
+      document.addEventListener('visibilitychange', () => { if (document.hidden && G.state === 'playing') G.pause(); });
       requestAnimationFrame(frame);
     } catch (err) {
       console.error(err);
@@ -77,6 +81,7 @@
     U.world.shake.trauma = 0;
     U.ui.resetHud();
     U.ui.hideUpgrades(); U.ui.showPause(false); U.ui.hideEnd();
+    U.audio.setAmbient(1);
     G.wave = 0; G.waveState = null; G.endTimer = -1; G.clearTimer = -1;
     G.startWave(1);
   };
@@ -170,25 +175,28 @@
   }
 
   const _p = new THREE.Vector3();
+  // Prefer rim points the player can see (arrival effect on screen); never closer than 6.5 m.
   function pickSpawnPoint() {
     const P = U.player.pos, cam = U.world.camera;
-    const cands = [];
-    for (let i = 0; i < 24; i++) {
-      const a = (i / 24) * Math.PI * 2;
-      const R = U.arenaMaxR(Math.sin(a), -Math.cos(a)) - 1.2;
-      const x = Math.sin(a) * R, z = -Math.cos(a) * R;
-      const d = Math.hypot(x - P.x, z - P.z);
-      if (d < 6.5) continue;
-      let ok = true;
-      for (const e of U.enemies.list) if (Math.hypot(e.pos.x - x, e.pos.z - z) < 2.2) ok = false;
-      if (!ok) continue;
-      _p.set(x, 0.5, z).project(cam);
-      const visible = Math.abs(_p.x) < 0.9 && _p.y > -0.85 && _p.y < 0.8;
-      cands.push({ x, z, score: (visible ? 10 : 0) + Math.random() * 3 - Math.abs(d - 10) * 0.3 });
+    cam.updateMatrixWorld();
+    let best = null;
+    for (let ring = 0; ring < 2; ring++) {
+      for (let i = 0; i < 48; i++) {
+        const a = (i / 48) * Math.PI * 2 + ring * 0.065;
+        const R = U.arenaMaxR(Math.sin(a), -Math.cos(a)) - (ring ? 3.4 : 1.2);
+        const x = Math.sin(a) * R, z = -Math.cos(a) * R;
+        const d = Math.hypot(x - P.x, z - P.z);
+        if (d < 6.5) continue;
+        let crowd = 0;
+        for (const e of U.enemies.list) if (e.alive && Math.hypot(e.pos.x - x, e.pos.z - z) < 2.0) crowd++;
+        _p.set(x, 0.5, z).project(cam);
+        // how far outside the safe screen box the point lands (0 = fully visible)
+        const over = Math.max(0, Math.abs(_p.x) - 0.85) + Math.max(0, _p.y - 0.78) + Math.max(0, -0.8 - _p.y) + (_p.z > 1 ? 5 : 0);
+        const score = -over * 20 - crowd * 6 - Math.abs(d - 9) * 0.25 + Math.random() * 2;
+        if (!best || score > best.score) best = { x, z, score };
+      }
     }
-    cands.sort((a, b) => b.score - a.score);
-    const c = cands[0] || { x: 0, z: -10 };
-    return new THREE.Vector3(c.x, 0, c.z);
+    return new THREE.Vector3(best ? best.x : 0, 0, best ? best.z : -10);
   }
 
   G.onEnemyKilled = function () {
@@ -197,12 +205,16 @@
     ws.killed++;
     const remaining = ws.total - ws.killed;
     U.ui.setWave(G.wave, Math.max(0, remaining));
-    if (remaining <= 0 && U.player.alive) G.clearTimer = 1.5;
+    if (remaining <= 0 && U.player.alive) {
+      G.clearTimer = 1.5;
+      U.enemies.clearHazards(); // stray volleys and eruptions vanish with the last enemy
+    }
   };
 
-  G.onPlayerDeath = function () { G.endTimer = 2.2; };
+  G.onPlayerDeath = function () { G.endTimer = 2.2; G.clearTimer = -1; };
 
   function waveCleared() {
+    if (!U.player.alive) return;
     G.waveState = null;
     if (G.wave >= WAVES.length) {
       G.state = 'victory';
@@ -256,6 +268,7 @@
     updateWave(dt);
     U.world.update(dt, U.time.now);
     U.world.followCamera(U.player.pos, rawDt);
+    U.world.camera.updateMatrixWorld(); // keep the aim raycast in sync even when stepping without rendering
     U.ui.update(rawDt);
     if (G.clearTimer > 0) { G.clearTimer -= dt; if (G.clearTimer <= 0) { G.clearTimer = -1; waveCleared(); } }
     if (G.endTimer > 0) {

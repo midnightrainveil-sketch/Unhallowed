@@ -18,7 +18,7 @@
     W.renderer = renderer;
 
     const scene = new T.Scene();
-    W.fogColor = new T.Color(0.2, 0.205, 0.228);
+    W.fogColor = new T.Color(0.15, 0.154, 0.172);
     scene.fog = new T.Fog(W.fogColor, 30, 340);
     W.scene = scene;
 
@@ -72,6 +72,10 @@
     W.renderer.setSize(w, h, false);
     W.composer.setSize(w, h);
     W.grade.uniforms.uAspect.value = w / h;
+    // point sprites are sized in drawing-buffer pixels
+    const ps = h * W.pixelRatio;
+    if (W.motes) W.motes.material.uniforms.uScale.value = ps * (300 / 720);
+    if (U.fx && U.fx.spark) { U.fx.spark.pts.material.uniforms.uScale.value = ps * 0.9; U.fx.puff.pts.material.uniforms.uScale.value = ps * 0.9; }
   };
 
   const GradeShader = {
@@ -668,9 +672,9 @@
   function buildMist() {
     W.mist = [
       // luminous abyss far below: the spires rise out of it
-      mistLayer(-120, 10, 800, 6, 340, 0.95, 0.0035, 0x9ca0ac, [0.0012, 0.0005], [-0.0008, 0.0009]),
-      mistLayer(-78, 14, 520, 8, 240, 0.7, 0.006, 0xa8acb8, [-0.0018, 0.0008], [0.0013, -0.0007]),
-      mistLayer(-44, 16, 320, 10, 150, 0.5, 0.01, 0xb2b6c2, [0.0024, -0.001], [-0.0018, 0.0016]),
+      mistLayer(-120, 10, 800, 6, 340, 0.95, 0.0035, 0x7c808c, [0.0012, 0.0005], [-0.0008, 0.0009]),
+      mistLayer(-78, 14, 520, 8, 240, 0.66, 0.006, 0x8e929e, [-0.0018, 0.0008], [0.0013, -0.0007]),
+      mistLayer(-44, 16, 320, 10, 150, 0.46, 0.01, 0xa2a6b2, [0.0024, -0.001], [-0.0018, 0.0016]),
       // haze curling just beneath and around the rim
       mistLayer(-3.5, 14, 34, 3, 14, 0.24, 0.04, 0xbcc0cb, [0.004, 0.0015], [-0.003, 0.004]),
       mistLayer(0.4, 15.5, 26, 2.5, 9, 0.16, 0.05, 0xc6c9d3, [0.006, 0.002], [-0.004, 0.005]),
@@ -792,14 +796,14 @@
       d.rotation.x += d.userData.spin * 0.5 * dt;
     }
     // global dimming for The Seal Objects' anticipation
-    const k = 1 - W.dim * 0.62;
+    const k = 1 - W.dim * 0.72;
     W.hemi.intensity = W.baseLight.hemi * k;
-    W.key.intensity = W.baseLight.key * (1 - W.dim * 0.5);
+    W.key.intensity = W.baseLight.key * (1 - W.dim * 0.65);
     W.fill.intensity = W.baseLight.fill * k;
     W.heroLight.intensity = W.baseLight.hero * (1 - W.dim * 0.7);
     W.sky.material.uniforms.uDim.value = W.dim;
     W.eclipse.material.uniforms.uDim.value = W.dim;
-    W.grade.uniforms.uDim.value = W.dim * 0.55;
+    W.grade.uniforms.uDim.value = W.dim * 0.7;
     W.seal.material.opacity = 0.2 + W.sealPulse * 0.6;
     W.sealPulse = Math.max(0, W.sealPulse - dt * 1.2);
     // view-space key direction for rim shading (camera orientation is fixed, but cheap to recompute)

@@ -165,6 +165,7 @@
     const W = window.innerWidth, H = window.innerHeight;
     for (const e of U.enemies.list) {
       if (i >= UI.markers.length) break;
+      if (!e.alive) continue;
       _v.copy(e.pos).setY(1.0).project(cam);
       const inside = Math.abs(_v.x) < 0.98 && Math.abs(_v.y) < 0.96 && _v.z < 1;
       if (inside) continue;
@@ -248,13 +249,15 @@
         <p>${u.desc}</p>
         <div class="card-effect">${maxed ? 'Fully taken.' : u.effect(lvl + 1)}</div>
         <div class="card-level">${pips}</div>`;
-      const pick = () => { if (!maxed) onPick(u.id); };
+      const pick = () => { if (!maxed && performance.now() - UI.cardsOpenedAt > 350) onPick(u.id); };
       b.addEventListener('click', pick);
       UI.cardHandlers[i] = pick;
       wrap.appendChild(b);
     });
     $('upgrade-overlay').classList.remove('hidden');
-    setTimeout(() => { const f = wrap.querySelector('.card:not(:disabled)'); if (f) f.focus({ preventScroll: true }); }, 50);
+    UI.cardsOpenedAt = performance.now();
+    // no auto-focus: a dodge/attack key pressed as the overlay opens must not pick a card
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   };
   UI.hideUpgrades = function () { $('upgrade-overlay').classList.add('hidden'); UI.cardHandlers = null; };
 

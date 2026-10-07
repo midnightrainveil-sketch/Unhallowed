@@ -29,7 +29,7 @@ A desktop browser with WebGL2 is required. Use a mouse and keyboard.
 | **E** | Hands Beneath — hold to preview the area, release to cast (8 s) |
 | **R** | Sever the Veil — giant spectral blade sweeps a wide cone (10 s) |
 | **T** | The Missing Second — hold to preview, release: time field at half speed for 4 s (14 s) |
-| **Y** | The Seal Objects — one massive radial rupture after a 1 s build-up (30 s, ready at start) |
+| **1** | The Seal Objects — one massive radial rupture after a 1 s build-up (30 s, ready at start) |
 | **Right mouse** | Cancel an E/T preview |
 | **Esc** | Pause |
 | **1 / 2 / 3** | Choose an upgrade card |
@@ -58,7 +58,7 @@ js/hands.js           articulated spectral hands (skinned, posable)
 js/vaust.js           Vaust model, procedural animation, cloth/hair, arm IK
 js/fx.js              pooled effects, sword crescents, afterimages, telegraphs
 js/enemies.js         Pursuer, Hex Idol, projectiles, eruptions
-js/skills.js          Q E R T Y
+js/skills.js          Q E R T 1 (Y)
 js/player.js          movement, aim, dodge, combo, damage
 js/ui.js              HUD and overlays
 js/main.js            game states, waves, upgrade loop, frame loop

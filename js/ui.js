@@ -34,7 +34,7 @@
       const el = document.createElement('div');
       el.className = 'skill ready' + (k === 'Y' ? ' ultimate' : '');
       el.title = `${k} — ${U.skills.DEFS[k].name}`;
-      el.innerHTML = `${svg(ICONS[k])}<div class="cd"></div><div class="cd-text"></div><div class="key">${k}</div>`;
+      el.innerHTML = `${svg(ICONS[k])}<div class="cd"></div><div class="cd-text"></div><div class="key">${k === 'Y' ? '1' : k}</div>`;
       bar.appendChild(el);
       UI.slots[k] = { el, cd: el.querySelector('.cd'), txt: el.querySelector('.cd-text'), last: -1 };
     }

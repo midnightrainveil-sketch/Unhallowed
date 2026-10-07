@@ -203,12 +203,13 @@
 
   // ---------------- skills input ----------------
   const TARGETED = { E: true, T: true };
+  const KEYCODE = { Y: 'Digit1' }; // The Seal Objects is bound to the 1 key
   function handleSkills(dt) {
     const S = U.skills;
     // right click cancels a held E/T preview
     if (P.aiming && IN.mouse.rightPressed) { P.aiming = null; S.hidePreview(); }
     for (const key of S.KEYS) {
-      const code = 'Key' + key;
+      const code = KEYCODE[key] || ('Key' + key);
       if (TARGETED[key]) {
         if (IN.hit(code) && !P.aiming) {
           if (S.ready(key)) P.aiming = { key, t: 0 };

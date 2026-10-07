@@ -33,14 +33,13 @@
     uniform float uOpen, uOpacity; varying vec2 vUv;
     void main(){
       vec2 p = vUv * 2.0 - 1.0;
-      float w = uOpen * (1.0 - p.y * p.y);           // lens: long axis along local Y, sharp tips
+      float w = uOpen * 0.22 * pow(max(1.0 - p.y * p.y, 0.0), 1.5);   // thin lens, long axis along local Y, sharp tips
       float d = abs(p.x) - w;
-      float edge = exp(-pow(d / 0.06, 2.0));
-      float inside = step(d, 0.0);
-      float tips = exp(-pow(p.x / 0.03, 2.0)) * (1.0 - abs(p.y)) * 0.6;
-      vec3 col = vec3(2.6, 2.65, 2.85) * (edge + tips);
-      float a = clamp(edge + tips + inside * 0.92, 0.0, 1.0) * uOpacity;
-      gl_FragColor = vec4(mix(vec3(0.0), col, clamp(edge + tips, 0.0, 1.0)), a);
+      float edge = exp(-pow(d / 0.035, 2.0)) * (1.0 - smoothstep(0.7, 1.0, abs(p.y)));
+      float core = (1.0 - smoothstep(-0.02, 0.0, d)) * step(0.004, w);   // dark interior, only inside the lens
+      float a = clamp(edge + core * 0.85, 0.0, 1.0) * uOpacity;
+      if (a < 0.004) discard;
+      gl_FragColor = vec4(vec3(2.8, 2.85, 3.1) * edge, a);
     }`;
   const TEAR_FS = `
     uniform float uOpen, uOpacity, uHead; varying vec2 vUv;
@@ -318,7 +317,7 @@
         if (S.slit.visible) {
           S.slit.position.copy(origin);
           orientSlit(S.slit, origin, dir);
-          S.slit.scale.set(0.42 * (0.7 + 0.3 * open) * Math.sqrt(m.qWidth), 1.55 * (0.4 + 0.6 * open), 1);
+          S.slit.scale.set(1.1 * Math.sqrt(m.qWidth), 1.7 * (0.4 + 0.6 * open), 1);
           S.slit.material.uniforms.uOpen.value = open * 0.5 * Math.min(1.4, m.qWidth);
           S.slit.material.uniforms.uOpacity.value = Math.min(1, open * 1.5);
         }

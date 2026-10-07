@@ -22,7 +22,8 @@
     P.pos = new V3();
     P.vel = new V3();
     P.aim = new V3(0, 0, -5);
-    P.upgrades = { widen: 0, hands: 0, absence: 0 };
+    P.upgrades = { widen: 0, hands: 0, absence: 0, edge: 0, rift: 0, second: 0, vigor: 0 };
+    P.relics = [];
     P.reset();
   };
 
@@ -32,9 +33,12 @@
     P.vel.set(0, 0, 0);
     P.facing = Math.PI; // facing north (-Z), toward the eclipse
     P.radius = Tn.radius;
-    P.hp = Tn.maxHp; P.maxHp = Tn.maxHp;
+    for (const k in P.upgrades) P.upgrades[k] = 0;
+    P.relics.length = 0;
+    P.recalc();
+    P.hp = P.maxHp;
     P.alive = true; P.deadT = -1;
-    P.charges = Tn.maxCharges; P.chargeT = 0;
+    P.charges = P.mods.maxCharges; P.chargeT = 0;
     P.dodge = null; P.dodgeCooldown = 0;
     P.protect = 0; P.hurt = 0;
     P.attack = null; P.combo = 0; P.comboTimer = 0; P.queued = false;
@@ -42,12 +46,52 @@
     for (const ec of echoes) if (ec.cres) FX.crescentRelease(ec.cres);
     echoes.length = 0;
     P.aiming = null; // E/T held for preview
+    P.tether = null; // the Gaoler's chain: { anchor (V3), len, t, breaks }
+    P.yank = null;   // forced pull toward an anchor
+    P.slow = 0;      // the Sealwright's own missing second
+    P.pinT = 0;      // pinned in time by hands from above
+    P.written = 0;   // the Sealwright's mark
     P.buffer = null; // buffered skill during dodge
-    P.upgrades.widen = 0; P.upgrades.hands = 0; P.upgrades.absence = 0;
     P.lastMove = new V3(0, 0, -1);
     P.rig.reset(P.pos, P.facing);
     P.rig.setVisible(true);
     P.stepT = 0;
+  };
+
+  // ---------------- gifts of the seal (upgrades) and relics of the locks ----------------
+  P.hasRelic = function (id) { return P.relics.indexOf(id) >= 0; };
+  P.recalc = function () {
+    const Tn = P.TUNE, up = P.upgrades;
+    const scars = P.relics.filter((r) => r === 'scar').length;
+    P.mods = {
+      maxHp: Tn.maxHp + up.vigor * 20 + scars * 15,
+      maxCharges: Tn.maxCharges + (P.hasRelic('key') ? 1 : 0),
+      atk: Math.pow(1.15, up.edge),
+      foldRange: Tn.foldRange + up.edge * 2 + (P.hasRelic('lidless') ? 4 : 0),
+      foldMin: P.hasRelic('lidless') ? 0.65 : Tn.foldMin,
+      taken: P.hasRelic('mask') ? 0.85 : 1,
+    };
+    P.maxHp = P.mods.maxHp;
+    P.hp = Math.min(P.hp || P.maxHp, P.maxHp);
+  };
+  P.applyUpgrade = function (id) {
+    P.upgrades[id] = (P.upgrades[id] || 0) + 1;
+    P.recalc();
+    if (id === 'vigor') P.heal(40);
+  };
+  P.addRelic = function (id) {
+    P.relics.push(id);
+    P.recalc();
+    if (id === 'key') P.charges = Math.min(P.mods.maxCharges, P.charges + 1);
+  };
+  // continue a saved run
+  P.restore = function (save) {
+    for (const k in P.upgrades) P.upgrades[k] = (save.upgrades && save.upgrades[k]) || 0;
+    P.relics.length = 0;
+    for (const r of save.relics || []) P.relics.push(r);
+    P.recalc();
+    P.hp = Math.min(P.maxHp, Math.max(1, save.hp || P.maxHp));
+    P.charges = P.mods.maxCharges;
   };
 
   P.rechargeTime = function () { return P.TUNE.dodgeRecharge * Math.pow(0.8, P.upgrades.absence); };
@@ -72,9 +116,9 @@
     P.hurt = Math.max(0, P.hurt - dt);
 
     // ---- dodge charges recharge sequentially ----
-    if (P.charges < Tn.maxCharges) {
+    if (P.charges < P.mods.maxCharges) {
       P.chargeT += dt / P.rechargeTime();
-      if (P.chargeT >= 1) { P.charges++; P.chargeT = P.charges < Tn.maxCharges ? P.chargeT - 1 : 0; if (U.ui) U.ui.onCharge(); }
+      if (P.chargeT >= 1) { P.charges++; P.chargeT = P.charges < P.mods.maxCharges ? P.chargeT - 1 : 0; if (U.ui) U.ui.onCharge(); }
     } else P.chargeT = 0;
 
     if (!P.alive) {
@@ -98,8 +142,24 @@
     if (aimLen > 0.05) _aimDir.multiplyScalar(1 / aimLen); else U.dirFromAngle(P.facing, _aimDir);
     const aimYaw = Math.atan2(_aimDir.x, _aimDir.z);
 
+    // ---- held by something else ----
+    P.written = Math.max(0, P.written - dt);
+    if (P.pinT > 0) { P.pinT -= dt; ix = iz = 0; P.vel.set(0, 0, 0); }
+    if (P.yank) {
+      const y = P.yank;
+      y.t += dt;
+      const k = U.easeInCubic(U.clamp(y.t / y.dur, 0, 1));
+      P.pos.lerpVectors(y.from, y.to, k);
+      clampArena(P.pos, P.radius);
+      if (Math.random() < 0.8) FX.sparks(_tmp2.copy(P.pos).setY(0.6), 1, { speed: 2, life: 0.25, size: 0.07, grav: 0 });
+      if (y.t >= y.dur) P.yank = null;
+      animate(dt);
+      return;
+    }
+    if (P.slow > 0) P.slow = Math.max(0, P.slow - dt);
+
     // ---- dodge ----
-    if (IN.hit('ShiftLeft') || IN.hit('ShiftRight') || IN.hit('Space')) tryDodge(ix, iz, il);
+    if (P.pinT <= 0 && (IN.hit('ShiftLeft') || IN.hit('ShiftRight') || IN.hit('Space'))) tryDodge(ix, iz, il);
 
     if (P.dodge) {
       const d = P.dodge;
@@ -116,6 +176,7 @@
       FX.mist(_tmp2.copy(P.pos).setY(0.5), 1, { spread: 0.25, rise: 0.2, out: 0.1, life: 0.5, size: 0.7, a: 0.16, vel: _tmp.copy(d.dir).multiplyScalar(-1.5) });
       if (Math.random() < 0.7) FX.sparks(_tmp2.copy(P.pos).setY(0.4 + Math.random() * 1.4), 1, { speed: 1.5, dir: _tmp.copy(d.dir).negate(), bias: 0.7, life: 0.3, size: 0.07, grav: 0 });
       P.facing = U.dampAngle(P.facing, Math.atan2(d.dir.x, d.dir.z), 30, dt);
+      leash();
       if (d.t >= Tn.dodgeDur) {
         P.dodge = null;
         P.vel.multiplyScalar(0.25);
@@ -130,6 +191,7 @@
         speedMul = p < S.b ? 0.5 : 0.72;
       }
       if (P.gesture && HEAVY_G[P.gesture.kind] && P.gesture.t < P.gesture.holdT) speedMul = Math.min(speedMul, P.gesture.kind === 'Kneel' ? 0.08 : 0.6);
+      if (P.slowField) speedMul *= 0.5;
       const sp = Tn.speed * speedMul;
       _mv.set(ix * sp, 0, iz * sp);
       const k = 1 - Math.exp(-22 * dt);
@@ -145,6 +207,7 @@
         if (d < min && d > 1e-4) { P.pos.x += (dx / d) * (min - d); P.pos.z += (dz / d) * (min - d); }
       }
       clampArena(P.pos, P.radius); // enemies can never push Vaust past the rim
+      leash();
       // facing follows the cursor; locked during the active part of a swing
       const locked = P.attack && P.attack.t >= U.SLASH[P.attack.kind].dur * U.SLASH[P.attack.kind].a && P.attack.t < U.SLASH[P.attack.kind].dur * U.SLASH[P.attack.kind].b;
       if (!locked) P.facing = U.dampAngle(P.facing, aimYaw, 28, dt);
@@ -157,11 +220,11 @@
     }
 
     // ---- skills ----
-    handleSkills(dt);
+    if (P.pinT <= 0) handleSkills(dt);
 
     // ---- basic attack ----
     P.comboTimer += dt;
-    const busy = P.gesture && HEAVY_G[P.gesture.kind] && P.gesture.t < P.gesture.holdT;
+    const busy = (P.gesture && HEAVY_G[P.gesture.kind] && P.gesture.t < P.gesture.holdT) || P.pinT > 0;
     if ((P.dodge || busy) && IN.mouse.pressed) P.queued = true; // a click during a dodge attacks right after it
     if (!P.dodge && !busy) {
       const want = IN.mouse.down || IN.mouse.pressed;
@@ -182,7 +245,14 @@
     footsteps(dt);
   };
 
-  function clampArena(p, r) { U.arenaClamp(p, r); }
+  function clampArena(p, r) { U.arenaClamp(p, r); if (U.bosses && U.bosses.clampPlayer) U.bosses.clampPlayer(p, r); }
+  // the Gaoler's chain: he can't go further than its length
+  function leash() {
+    const t = P.tether;
+    if (!t) return;
+    const dx = P.pos.x - t.anchor.x, dz = P.pos.z - t.anchor.z, d = Math.hypot(dx, dz);
+    if (d > t.len) { P.pos.x = t.anchor.x + dx / d * t.len; P.pos.z = t.anchor.z + dz / d * t.len; }
+  }
   P.clampArena = clampArena;
 
   function tryDodge(ix, iz, il) {
@@ -193,12 +263,18 @@
     else dir.set(P.aim.x - P.pos.x, 0, P.aim.z - P.pos.z);
     if (dir.lengthSq() < 1e-4) U.dirFromAngle(P.facing, dir);
     dir.normalize();
-    if (P.charges === Tn.maxCharges) P.chargeT = 0;
+    if (P.charges === P.mods.maxCharges) P.chargeT = 0;
     P.charges--;
     // cancel attack / recovery
     if (P.attack) { FX.crescentRelease(P.attack.cres); P.attack = null; }
     P.queued = false;
     P.dodge = { t: 0, dir, from: P.pos.clone(), ghostT: 0 };
+    // dodging away strains the chain; twice breaks it
+    if (P.tether) {
+      const t = P.tether, ax = P.pos.x - t.anchor.x, az = P.pos.z - t.anchor.z, al = Math.hypot(ax, az) || 1;
+      if ((dir.x * ax + dir.z * az) / al > 0.2 || al > t.len - 0.6) { t.breaks++; if (U.bosses.onTetherStrain) U.bosses.onTetherStrain(t); }
+    }
+    if (P.written > 0) { P.written = 0; FX.sparks(_tmp.copy(P.pos).setY(2.2), 8, { speed: 2, life: 0.3, size: 0.07, grav: 0 }); }
     FX.afterimage(0.75, 0.42);
     FX.ring({ pos: P.pos, r0: 0.3, r1: 1.4, dur: 0.3, w0: 0.1, w1: 0.02, opacity: 0.7 });
     FX.mist(_tmp.copy(P.pos).setY(0.3), 4, { spread: 0.4, rise: 0.3, out: 0.8, life: 0.6, size: 0.9, a: 0.2 });
@@ -347,7 +423,7 @@
 
   // ---------------- the fold: distance is a suggestion ----------------
   // The blade cuts the space next to him; the thing it was aimed at, however far, is in that space for an instant.
-  function foldFalloff(d) { return U.lerp(1, P.TUNE.foldMin, U.clamp((d - 2) / 12, 0, 1)); }
+  function foldFalloff(d) { return U.lerp(1, P.mods.foldMin, U.clamp((d - 2) / 12, 0, 1)); }
   const _fm = new T.Matrix4(), _fw = new V3(), _fn = new V3();
   function startFold(S, bodyM, yaw, heavy, mult) {
     const Tn = P.TUNE, melee = heavy ? Tn.s2Range : Tn.s1Range;
@@ -355,7 +431,8 @@
     for (const en of U.enemies.list) {
       if (!en.alive || en.under) continue;
       const dx = en.pos.x - P.pos.x, dz = en.pos.z - P.pos.z, d = Math.hypot(dx, dz);
-      if (d <= melee + en.radius * 0.6 || d > Tn.foldRange) continue;
+      if (d <= melee + en.radius * 0.6 || d > P.mods.foldRange + en.radius) continue;
+      if (U.bosses.walls.length && U.bosses.blocked(P.pos, en.pos)) continue; // you cannot fold through what is written
       const rel = Math.abs(U.angleDiff(yaw, Math.atan2(dx, dz)));
       if (rel > Tn.foldCone) continue;
       const s = Math.hypot(en.pos.x - P.aim.x, en.pos.z - P.aim.z) + rel * 4;
@@ -380,7 +457,7 @@
     const dx = en.pos.x - P.pos.x, dz = en.pos.z - P.pos.z, d = Math.hypot(dx, dz) || 1;
     const k = foldFalloff(d) * mult;
     const dir = _tmp.set(dx / d, 0, dz / d);
-    U.enemies.hit(en, (heavy ? P.TUNE.s2Dmg : P.TUNE.s1Dmg) * k, { dir, knock: (heavy ? 3 : 1.5) * k });
+    U.enemies.hit(en, (heavy ? P.TUNE.s2Dmg : P.TUNE.s1Dmg) * k * P.mods.atk, { dir, knock: (heavy ? 3 : 1.5) * k, poise: heavy ? 1 : 0.3 });
     const hp = _tmp2.set(en.pos.x, en.type === 'idol' ? 1.7 : 1.15, en.pos.z);
     FX.sparks(hp, Math.round(8 + 10 * k), { speed: 6, dir, bias: 0.5, life: 0.3, size: 0.09, grav: 4 });
     FX.shards(hp, 3, { bright: true, speed: 4, size: 0.07, life: 0.4, dir, bias: 0.4 });
@@ -419,7 +496,7 @@
           const dx = en.pos.x - ec.origin.x, dz = en.pos.z - ec.origin.z, d = Math.hypot(dx, dz);
           if (d > P.TUNE.s2Range + en.radius * 0.6 || Math.abs(U.angleDiff(ec.yaw, Math.atan2(dx, dz))) > 1.35) continue;
           ec.hit.add(en);
-          U.enemies.hit(en, P.TUNE.s2Dmg * P.TUNE.echoMult, { dir: _tmp.set(dx / (d || 1), 0, dz / (d || 1)), knock: 2 });
+          U.enemies.hit(en, P.TUNE.s2Dmg * P.TUNE.echoMult * P.mods.atk, { dir: _tmp.set(dx / (d || 1), 0, dz / (d || 1)), knock: 2 });
           FX.sparks(_tmp2.set(en.pos.x, 1.15, en.pos.z), 10, { speed: 5, life: 0.3, size: 0.08, grav: 3 });
           U.audio.play('hit', { gap: 0.02 });
         }
@@ -434,7 +511,7 @@
 
   function landHit(en, heavy, nx, nz) {
     const dir = _tmp.set(nx, 0, nz);
-    U.enemies.hit(en, heavy ? P.TUNE.s2Dmg : P.TUNE.s1Dmg, { dir, knock: heavy ? 4.2 : 2.4 });
+    U.enemies.hit(en, (heavy ? P.TUNE.s2Dmg : P.TUNE.s1Dmg) * P.mods.atk, { dir, knock: heavy ? 4.2 : 2.4, poise: heavy ? 1 : 0.3 });
     const hp = _tmp2.set(en.pos.x - nx * en.radius * 0.6, en.type === 'idol' ? 1.7 : 1.15, en.pos.z - nz * en.radius * 0.6);
     FX.sparks(hp, heavy ? 22 : 12, { speed: heavy ? 8 : 6, dir, bias: 0.5, life: 0.3, size: heavy ? 0.11 : 0.09, grav: 4 });
     FX.shards(hp, heavy ? 5 : 2, { bright: true, speed: 5, size: 0.07, life: 0.4, dir, bias: 0.4 });
@@ -448,7 +525,9 @@
   // ---------------- damage ----------------
   P.takeDamage = function (amount, from) {
     if (!P.alive || P.invulnerable()) return false;
+    amount *= P.mods.taken * (P.written > 0 ? 1.3 : 1);
     P.hp = Math.max(0, P.hp - amount);
+    if (U.game.onPlayerHurt) U.game.onPlayerHurt(amount);
     P.protect = P.TUNE.hurtProtect;
     P.hurt = 0.3;
     U.world.addShake(0.2);

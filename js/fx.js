@@ -56,6 +56,14 @@
   function updateRing(r, dt) {
     r.t += dt;
     const o = r.o;
+    if (o.manual) {
+      // driven by its owner every frame (boss shockwaves, gaze circles); released by the owner
+      const u = r.mat.uniforms;
+      u.uR.value = o.r; u.uW.value = o.w; u.uOpacity.value = o.opacity; u.uFill.value = o.fill || 0; u.uInnerFade.value = o.innerFade || o.r;
+      r.mat.uniforms.uColor.value.copy(o.color || WHITE).multiplyScalar(o.intensity || 1);
+      r.mesh.position.set(o.pos.x, (o.y != null ? o.y : 0.06), o.pos.z);
+      return;
+    }
     const p = U.clamp(r.t / o.dur, 0, 1);
     const e = (o.ease || U.easeOutCubic)(p);
     const u = r.mat.uniforms;
@@ -419,13 +427,22 @@
       if (uMode < 0.5) inSector = 1.0;
       float inside = (1.0 - smoothstep(uR - 0.03, uR, d)) * inSector;
       float outline = exp(-sq((d - uR) / 0.045)) * inSector;
-      if (uMode > 0.5) {
+      if (uMode > 0.5 && uMode < 1.5) {
         float sideD = abs(abs(ang) - uHalf) * d;
         outline += exp(-sq(sideD / 0.04)) * (1.0 - smoothstep(uR, uR + 0.05, d)) * step(0.15, d);
       }
+      float dd = d;
+      if (uMode > 1.5) {
+        // lane: a straight strip of half-width uHalf running forward uR metres
+        float fw = -vP.y, side = abs(vP.x);
+        float inLen = step(0.0, fw) * (1.0 - smoothstep(uR - 0.03, uR, fw));
+        inside = inLen * (1.0 - smoothstep(uHalf - 0.03, uHalf, side));
+        outline = exp(-sq((side - uHalf) / 0.045)) * step(0.0, fw) * step(fw, uR) + exp(-sq((fw - uR) / 0.045)) * step(side, uHalf);
+        dd = fw;
+      }
       float front = uProgress * uR;
-      float fill = inside * (1.0 - smoothstep(front - 0.02, front, d)) * 0.2;
-      float frontLine = inside * exp(-sq((d - front) / 0.05)) * 0.7;
+      float fill = inside * (1.0 - smoothstep(front - 0.02, front, dd)) * 0.2;
+      float frontLine = inside * exp(-sq((dd - front) / 0.05)) * 0.7;
       float pulse = 0.85 + 0.15 * sin(uTime * 18.0);
       float a = (outline * (0.55 + 0.45 * uLocked) * pulse + fill + frontLine + inside * 0.035) * uOpacity;
       if (a < 0.003) discard;
@@ -453,7 +470,7 @@
     const size = o.r + 0.2;
     t.mesh.scale.set(size, size, 1);
     u.uSize.value = size;
-    u.uR.value = o.r; u.uHalf.value = o.half || Math.PI; u.uMode.value = o.half ? 1 : 0;
+    u.uR.value = o.r; u.uHalf.value = o.half || Math.PI; u.uMode.value = o.lane ? 2 : o.half ? 1 : 0;
     u.uProgress.value = 0; u.uLocked.value = 0; u.uOpacity.value = 1;
     u.uColor.value.copy(o.color || FX.AMBER).multiplyScalar(o.intensity || 1);
     t.grp.position.set(o.pos.x, 0.07, o.pos.z);
@@ -566,7 +583,7 @@
   // ---------------- Init / update / reset ----------------
   FX.init = function (scene) {
     FX.scene = scene;
-    FX.rings = new U.Pool(makeRing, 28);
+    FX.rings = new U.Pool(makeRing, 40);
     FX.spark = makePoints(900, true, false);
     FX.puff = makePoints(260, false, true);
     const shardGeo = new T.TetrahedronGeometry(1, 0);
@@ -591,7 +608,7 @@
       return { mesh: m, active: false, t: 0, dur: 0.3, release() { this.active = false; this.mesh.visible = false; } };
     }, 10);
     FX.crescents = new U.Pool(makeCrescent, 6);
-    FX.teles = new U.Pool(makeTelegraph, 24);
+    FX.teles = new U.Pool(makeTelegraph, 40);
     FX.ghostPool = new U.Pool(makeGhost, 12);
     FX.seams = new U.Pool(makeSeam, 6);
   };

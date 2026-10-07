@@ -10,6 +10,9 @@
     R: '<path d="M7 35 C13 16 31 7 42 10 C30 12 18 21 12 37 Z" fill="rgba(255,255,255,0.22)" stroke-width="1.8"/><path d="M8 41 L41 8" stroke-width="1.2" stroke-dasharray="2 3"/><path d="M33 6 L40 4 L38 11" stroke-width="1.6"/>',
     T: '<path d="M24 8 A16 16 0 1 1 9.5 17" stroke-width="2"/><path d="M14 11 A16 16 0 0 1 19 8.6" stroke-width="2"/><path d="M24 24 L24 13 M24 24 L31.5 28" stroke-width="2"/><path d="M24 40 V37 M40 24 H37 M8 24 H11" stroke-width="1.6"/><circle cx="24" cy="24" r="1.8" fill="#fff"/>',
     Y: '<circle cx="24" cy="24" r="13" stroke-width="2" stroke-dasharray="7.5 3.2"/><path d="M24 3 V9 M24 39 V45 M3 24 H9 M39 24 H45 M9.2 9.2 L13.4 13.4 M38.8 9.2 L34.6 13.4 M9.2 38.8 L13.4 34.6 M38.8 38.8 L34.6 34.6" stroke-width="1.6"/><path d="M24 16 L29 24 L24 32 L19 24 Z" stroke-width="1.8" fill="rgba(255,255,255,0.25)"/>',
+    atk: '<path d="M10 38 L34 14" stroke-width="2.6"/><path d="M34 14 L39 9 L38 15 Z" stroke-width="1.6"/><path d="M14 30 L18 34 M8 40 L12 36" stroke-width="2"/><path d="M28 30 C33 31 38 34 41 40 M25 33 C28 36 30 40 30 44" stroke-width="1.2" stroke-dasharray="2 3"/>',
+    vigor: '<path d="M24 6 L38 14 V28 C38 35 31 40 24 43 C17 40 10 35 10 28 V14 Z" stroke-width="2"/><path d="M24 15 V33 M16 24 H32" stroke-width="1.8"/>',
+    relic: '<circle cx="24" cy="24" r="15" stroke-width="1.6"/><path d="M24 9 L28 24 L24 39 L20 24 Z" stroke-width="1.8" fill="rgba(255,255,255,0.2)"/><path d="M9 24 H15 M33 24 H39" stroke-width="1.6"/>',
     dodge: '<path d="M30 10 L38 24 L30 38 L22 24 Z" stroke-width="2" fill="rgba(255,255,255,0.2)"/><path d="M6 18 H18 M4 24 H17 M6 30 H18" stroke-width="1.6"/>',
   };
   const svg = (inner) => `<svg viewBox="0 0 48 48" fill="none" stroke="#f2f2f5" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -24,7 +27,34 @@
     { id: 'absence', key: 'dodge', title: 'A Shorter Absence', skill: 'Spectral Dash',
       desc: 'Vaust returns from the between-place sooner. Each dodge charge recovers faster.',
       effect: (n) => `Dodge recharge −20%  (now ${(3 * Math.pow(0.8, n)).toFixed(2)} s per charge)` },
+    { id: 'edge', key: 'atk', label: 'LMB', title: 'The Fold Deepens', skill: 'Sword',
+      desc: 'Distance means less to him. The blade cuts harder and folds space from farther away.',
+      effect: (n) => `Sword damage +15% · fold reach +2 m  (now ×${Math.pow(1.15, n).toFixed(2)})` },
+    { id: 'rift', key: 'R', title: 'The Cut Stays', skill: 'Sever the Veil',
+      desc: 'The rift is slower to close, and what crosses it is cut deeper.',
+      effect: (n) => `Rift lasts +1 s · re-cut damage +30%  (now +${n} s)` },
+    { id: 'second', key: 'T', title: 'A Longer Second', skill: 'The Missing Second',
+      desc: 'More time goes missing. The field is wider and holds for longer.',
+      effect: (n) => `Field radius +15% · duration +1 s  (now ×${Math.pow(1.15, n).toFixed(2)})` },
+    { id: 'vigor', key: 'vigor', label: 'SEAL', title: 'Hardened Seal', skill: 'Vaust', max: 99,
+      desc: 'The seal tightens around what is left of him, and holds him together.',
+      effect: () => `Max health +20 · heal 40` },
   ];
+  const UP_MAX = 3;
+
+  // Relics of the locks: one chosen after each keeper falls. Owned relics are replaced by a Scar.
+  UI.RELICS = {
+    key: { title: 'Key of the First Lock', from: 'gaoler', desc: 'The Gaoler’s key turns once more for him.', effect: 'A fourth dodge charge' },
+    chain: { title: 'Links of the Chain', from: 'gaoler', desc: 'Every life taken is a link added to his own.', effect: 'Each kill heals 5' },
+    mask: { title: 'The Cracked Mask', from: 'gaoler', desc: 'He wears the Gaoler’s borrowed face. Blows land on someone else.', effect: 'Take 15% less damage' },
+    lidless: { title: 'The Lidless Eye', from: 'witness', desc: 'He sees as the Witness saw: nothing is far.', effect: 'Fold reach +4 m · far cuts keep 65% damage' },
+    choir: { title: 'Shard of the Choir', from: 'witness', desc: 'A splinter of the eye that never stops singing.', effect: 'Q cooldown −1.5 s · pins last 0.3 s longer' },
+    eclipse: { title: 'Fragment of the Eclipse', from: 'witness', desc: 'A piece of the lid. The seal objects more readily.', effect: 'The Seal Objects cooldown −8 s' },
+    page: { title: 'The Blank Page', from: 'sealwright', desc: 'What is unwritten stays unwritten longer.', effect: 'Marks last twice as long · detonations deal +40' },
+    revised: { title: 'The Revised Second', from: 'sealwright', desc: 'In the time that goes missing, he mends.', effect: 'Standing in your own Missing Second heals 5 per second' },
+    lastline: { title: 'The Last Line', from: 'sealwright', desc: 'The Sealwright’s final stroke, kept open.', effect: 'Rift lasts +2 s · re-cut damage ×1.5' },
+    scar: { title: 'Scar of the Lock', from: null, desc: 'Nothing new was left in the lock. It leaves a scar instead.', effect: 'Max health +15 · may be taken again' },
+  };
 
   UI.init = function () {
     // skill bar
@@ -64,6 +94,8 @@
     b.disabled = false;
     b.textContent = 'Play';
     b.addEventListener('click', () => U.game.start());
+    $('btn-continue').addEventListener('click', () => U.game.continueRun());
+    UI.refreshTitle();
     b.focus({ preventScroll: true });
   };
 
@@ -72,7 +104,7 @@
 
   UI.showTitle = function (show) {
     const t = $('title-screen');
-    if (show) { t.classList.remove('hidden'); t.classList.remove('leaving'); UI.startMotes(); }
+    if (show) { t.classList.remove('hidden'); t.classList.remove('leaving'); UI.startMotes(); UI.refreshTitle(); }
     else { t.classList.add('leaving'); setTimeout(() => { if (U.game.state !== 'title') t.classList.add('hidden'); }, 900); }
   };
   UI.showHud = function (show) { $('hud').classList.toggle('hidden', !show); };
@@ -106,8 +138,13 @@
   };
 
   // ---------- HUD ----------
-  const ROMAN = ['', 'I', 'II', 'III', 'IV'];
-  UI.roman = (n) => ROMAN[n] || String(n);
+  UI.roman = (n) => {
+    if (!(n > 0) || n > 3999) return String(n);
+    const M = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
+    let s = '';
+    for (const [v, r] of M) while (n >= v) { s += r; n -= v; }
+    return s;
+  };
 
   UI.update = function (dt) {
     const P = U.player;
@@ -124,6 +161,7 @@
     UI.portrait.classList.toggle('low', low);
     // dodge pips
     UI.pips.forEach((pip, i) => {
+      if (i >= 3) pip.classList.toggle('on', i < P.mods.maxCharges);
       const full = i < P.charges;
       pip.classList.toggle('full', full);
       const fill = pip.firstElementChild;
@@ -133,7 +171,7 @@
     const S = U.skills;
     for (const key of S.KEYS) {
       const s = UI.slots[key];
-      const cd = S.cd[key], max = S.DEFS[key].cd;
+      const cd = S.cd[key], max = S.cdOf(key);
       const f = cd > 0 ? cd / max : 0;
       if (Math.abs(f - s.last) > 0.002) {
         s.cd.style.setProperty('--cd', f.toFixed(4));
@@ -141,8 +179,8 @@
       }
       const txt = cd > 0 ? (cd < 1 ? cd.toFixed(1) : Math.ceil(cd).toString()) : '';
       if (s.txt.textContent !== txt) s.txt.textContent = txt;
-      s.el.classList.toggle('ready', cd <= 0);
-      s.el.classList.toggle('cooling', cd > 0);
+      s.el.classList.toggle('ready', cd <= 0 && S.lock <= 0);
+      s.el.classList.toggle('cooling', cd > 0 || S.lock > 0);
       s.el.classList.toggle('aiming', !!(P.aiming && P.aiming.key === key));
     }
     // vignette: recent damage + low health pulse
@@ -151,6 +189,7 @@
     UI.vignette.style.opacity = Math.min(1, UI.hurtPulse + lowPulse).toFixed(3);
     U.world.grade.uniforms.uHurt.value = UI.hurtPulse * 0.5;
     UI.updateMarkers();
+    updateBoss(dt);
     // controls hint fades after a while
     if (UI.hintT != null) {
       UI.hintT += dt;
@@ -175,7 +214,7 @@
       x /= m; y /= m;
       const el = UI.markers[i++];
       el.style.display = 'block';
-      el.className = 'edge-marker' + (e.type === 'idol' ? ' idol' : '');
+      el.className = 'edge-marker' + (e.type === 'idol' ? ' idol' : '') + (e.isBoss ? ' boss' : '');
       const px = (x * 0.5 + 0.5) * W, py = (-y * 0.5 + 0.5) * H;
       const ang = Math.atan2(x, y);
       el.style.transform = `translate(${px - 7}px, ${py - 7}px) rotate(${ang}rad)`;
@@ -183,10 +222,46 @@
     for (; i < UI.markers.length; i++) UI.markers[i].style.display = 'none';
   };
 
-  UI.setWave = function (n, remaining) {
-    $('wave-label').textContent = 'Wave ' + UI.roman(n);
-    $('wave-remaining').textContent = remaining === 1 ? '1 remains' : `${remaining} remain`;
+  UI.setWave = function (label, remaining) {
+    $('wave-label').textContent = label;
+    const r = $('wave-remaining');
+    r.style.display = remaining < 0 ? 'none' : '';
+    r.textContent = remaining === 1 ? '1 remains' : `${remaining} remain`;
   };
+  const fmt = (n) => Math.round(n).toLocaleString('en-US');
+  UI.fmt = fmt;
+  UI.setScore = function (v, delta) {
+    $('score-value').textContent = fmt(v);
+    if (delta > 0) {
+      const p = $('score-pop');
+      p.textContent = '+' + fmt(delta);
+      p.classList.remove('show'); void p.offsetWidth; p.classList.add('show');
+    }
+  };
+  UI.setLoop = function (L) { $('score-loop').textContent = 'Loop ' + UI.roman(L); };
+
+  // ---------- keeper health bar ----------
+  UI.showBoss = function (b) {
+    UI.boss = b;
+    $('boss-bar').classList.toggle('hidden', !b);
+    if (!b) return;
+    $('boss-name').textContent = b.def.name;
+    $('boss-title').textContent = b.def.title;
+    $('boss-phases').innerHTML = (b.def.phases || []).map((f) => `<i style="left:${(f * 100).toFixed(1)}%"></i>`).join('');
+    $('boss-judgment').classList.toggle('hidden', !b.def.judgment);
+    UI.bossLag = 1;
+  };
+  function updateBoss(dt) {
+    const b = UI.boss;
+    if (!b) return;
+    const k = U.clamp(b.hp / b.maxHp, 0, 1);
+    $('boss-hp-fill').style.width = (k * 100).toFixed(2) + '%';
+    UI.bossLag = Math.max(k, UI.bossLag - dt * 0.35);
+    $('boss-hp-lag').style.width = (UI.bossLag * 100).toFixed(2) + '%';
+    $('boss-poise-fill').style.width = (U.clamp(b.poise / b.poiseMax, 0, 1) * 100).toFixed(1) + '%';
+    $('boss-bar').classList.toggle('broken', b.broken > 0);
+    if (b.def.judgment) $('boss-judgment-fill').style.width = (U.clamp(b.judgment || 0, 0, 1) * 100).toFixed(1) + '%';
+  }
 
   UI.banner = function (title, sub, dur) {
     const b = $('banner');
@@ -241,26 +316,22 @@
   };
 
   // ---------- overlays ----------
-  UI.showUpgrades = function (waveDone, onPick) {
-    const P = U.player;
-    $('upgrade-kicker').textContent = `Wave ${UI.roman(waveDone)} endured · the seal loosens`;
+  function openCards(kicker, title, cards, onPick) {
+    $('upgrade-kicker').textContent = kicker;
+    $('upgrade-title').textContent = title;
     const wrap = $('upgrade-cards');
     wrap.innerHTML = '';
     UI.cardHandlers = [];
-    UI.UPGRADES.forEach((u, i) => {
-      const lvl = P.upgrades[u.id];
-      const maxed = lvl >= 2;
+    cards.forEach((c, i) => {
       const b = document.createElement('button');
-      b.className = 'card';
-      b.disabled = maxed;
-      const pips = [0, 1].map((k) => `<i class="${k < lvl ? 'on' : ''}"></i>`).join('');
+      b.className = 'card' + (c.relic ? ' relic' : '');
+      const pips = c.pips != null ? `<div class="card-level">${Array.from({ length: c.pipMax }, (_, k) => `<i class="${k < c.pips ? 'on' : ''}"></i>`).join('')}</div>` : '';
       b.innerHTML = `<div class="card-num"><span>${i + 1}</span></div>
-        <div class="card-icon">${svg(ICONS[u.key])}</div>
-        <h3>${u.title}</h3><div class="card-skill">${u.key === 'dodge' ? 'SHIFT' : u.key} · ${u.skill}</div>
-        <p>${u.desc}</p>
-        <div class="card-effect">${maxed ? 'Fully taken.' : u.effect(lvl + 1)}</div>
-        <div class="card-level">${pips}</div>`;
-      const pick = () => { if (!maxed && performance.now() - UI.cardsOpenedAt > 350) onPick(u.id); };
+        <div class="card-icon">${svg(ICONS[c.icon] || ICONS.relic)}</div>
+        <h3>${c.title}</h3><div class="card-skill">${c.sub}</div>
+        <p>${c.desc}</p>
+        <div class="card-effect">${c.effect}</div>${pips}`;
+      const pick = () => { if (performance.now() - UI.cardsOpenedAt > 350) onPick(c.id); };
       b.addEventListener('click', pick);
       UI.cardHandlers[i] = pick;
       wrap.appendChild(b);
@@ -269,6 +340,36 @@
     UI.cardsOpenedAt = performance.now();
     // no auto-focus: a dodge/attack key pressed as the overlay opens must not pick a card
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
+  // three gifts at random from those not yet fully taken
+  UI.showUpgrades = function (waveDone, onPick) {
+    const P = U.player;
+    const pool = UI.UPGRADES.filter((u) => (P.upgrades[u.id] || 0) < (u.max || UP_MAX) && u.id !== 'vigor');
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const pick = pool.slice(0, 3);
+    while (pick.length < 3) pick.push(UI.UPGRADES.find((u) => u.id === 'vigor'));
+    const seen = new Set();
+    const cards = pick.filter((u) => (u.id === 'vigor' && seen.has('vigor') ? false : (seen.add(u.id), true))).map((u) => {
+      const lvl = P.upgrades[u.id] || 0, max = u.max || UP_MAX;
+      return { id: u.id, icon: u.key, title: u.title, sub: `${u.label || (u.key === 'dodge' ? 'SHIFT' : u.key === 'Y' ? '1' : u.key)} · ${u.skill}`, desc: u.desc, effect: u.effect(lvl + 1), pips: max < 10 ? lvl : null, pipMax: max };
+    });
+    const L = U.game.run ? U.game.run.loop : 1;
+    openCards(`Loop ${UI.roman(L)} · Wave ${UI.roman(waveDone)} endured · the seal loosens`, 'Choose a Gift of the Seal', cards, onPick);
+  };
+  UI.showRelics = function (bossKind, onPick) {
+    const P = U.player, def = U.bosses.DEFS[bossKind];
+    const ids = Object.keys(UI.RELICS).filter((id) => UI.RELICS[id].from === bossKind);
+    let scarShown = false;
+    const cards = [];
+    for (const id of ids) {
+      const owned = P.hasRelic(id);
+      if (owned && scarShown) continue;
+      const rid = owned ? 'scar' : id;
+      if (owned) scarShown = true;
+      const r = UI.RELICS[rid];
+      cards.push({ id: rid, icon: 'relic', relic: true, title: r.title, sub: owned ? 'RELIC · ANY LOCK' : 'RELIC · ' + def.name.toUpperCase(), desc: r.desc, effect: r.effect });
+    }
+    openCards(`${def.name} has fallen · the lock gives something up`, 'Claim a Relic of the Lock', cards, onPick);
   };
   UI.hideUpgrades = function () { $('upgrade-overlay').classList.add('hidden'); UI.cardHandlers = null; };
 
@@ -277,14 +378,29 @@
     if (show) setTimeout(() => $('btn-resume').focus({ preventScroll: true }), 30);
   };
 
-  UI.showEnd = function (victory) {
-    $('end-kicker').textContent = victory ? 'Three waves endured' : 'The courtyard keeps him';
-    $('end-title').textContent = victory ? 'The Seal Holds' : 'Vaust Falls';
-    $('end-text').textContent = victory
-      ? 'The courtyard falls silent beneath the white eclipse. For now, what is bound stays bound.'
-      : 'The hands go still. Somewhere beneath the stone, the seal waits for him to rise again.';
+  function scoreList(el, rank, title) {
+    const list = U.game.highScores();
+    el.innerHTML = list.length ? `<h4>${title}</h4><ol>${list.map((s, i) => `<li class="${i === rank ? 'new' : ''}"><b>${fmt(s.score)}</b><span>Loop ${UI.roman(s.loop)} · ${s.stage}</span></li>`).join('')}</ol>` : '';
+    el.classList.toggle('hidden', !list.length);
+  }
+  UI.showEnd = function (victory, rank) {
+    const r = U.game.run;
+    $('end-kicker').textContent = `Loop ${UI.roman(r.loop)} · ${U.game.stageLabel(r.stage)}`;
+    $('end-title').textContent = 'Vaust Falls';
+    $('end-text').textContent = 'The hands go still. Somewhere beneath the stone, the seal is rewritten, and waits for him to rise again.';
+    $('end-score').innerHTML = `${fmt(r.score)}<small>${rank === 0 ? 'A new highest mark against the seal' : rank > 0 ? 'Ranked ' + (rank + 1) + ' among the attempts' : r.kills + ' things unmade'}</small>`;
+    scoreList($('end-best'), rank, 'Deepest cracks in the seal');
     $('end-overlay').classList.remove('hidden');
     setTimeout(() => $('btn-restart-e').focus({ preventScroll: true }), 30);
+  };
+  // title: continue a saved run, and the table of past attempts
+  UI.refreshTitle = function () {
+    const s = U.game.loadSave();
+    const b = $('btn-continue');
+    b.classList.toggle('hidden', !s);
+    if (s) $('continue-sub').textContent = `Loop ${UI.roman(s.loop)} · ${U.game.stageLabel(s.stage)} · ${fmt(s.score)}`;
+    $('btn-play').textContent = s ? 'New Run' : 'Play';
+    scoreList($('title-scores'), -1, 'Deepest cracks in the seal');
   };
   UI.hideEnd = function () { $('end-overlay').classList.add('hidden'); };
 })(window.U);

@@ -266,7 +266,7 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
     S.tears.length = 0;
     S.halo.visible = false;
     if (S.previewTele) { S.previewTele.release(); S.previewTele = null; }
-    S.freeze = 0; S.strain = 0; S._replaying = false;
+    S.freeze = 0; S.strain = 0; S._replaying = false; S.lock = 0;
     U.world.dim = 0; U.world.neg = 0; U.world.eye = 0; U.world.strain = 0;
     if (U.audio.setStrain) U.audio.setStrain(0);
   };
@@ -310,11 +310,24 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
   const _sw = new V3();
 
   S.upgradeMult = function () {
-    const up = U.player.upgrades;
+    const P = U.player, up = P.upgrades, rel = (id) => P.hasRelic(id);
     return {
       qWidth: Math.pow(1.25, up.widen), qDmg: Math.pow(1.2, up.widen),
+      qPin: S.TUNE.qPin + (rel('choir') ? 0.3 : 0),
       eRadius: Math.pow(1.25, up.hands),
+      rTear: S.TUNE.rTear + up.rift + (rel('lastline') ? 2 : 0),
+      rRecut: S.TUNE.rRecut * (1 + 0.3 * up.rift) * (rel('lastline') ? 1.5 : 1),
+      tRadius: S.TUNE.tRadius * Math.pow(1.15, up.second),
+      tDur: S.TUNE.tDur + up.second,
     };
+  };
+  // cooldowns shortened by relics
+  S.cdOf = function (key) {
+    const P = U.player;
+    let cd = S.DEFS[key].cd;
+    if (key === 'Q' && P.hasRelic('choir')) cd -= 1.5;
+    if (key === 'Y' && P.hasRelic('eclipse')) cd -= 8;
+    return cd;
   };
 
   // clamp a ground target to the skill range and the courtyard
@@ -331,7 +344,7 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
   // ---------------- area preview (E / T while held) ----------------
   S.showPreview = function (key, aim) {
     const m = S.upgradeMult();
-    const r = key === 'E' ? S.TUNE.eRadius * m.eRadius : S.TUNE.tRadius;
+    const r = key === 'E' ? S.TUNE.eRadius * m.eRadius : m.tRadius;
     const range = key === 'E' ? S.TUNE.eRange : S.TUNE.tRange;
     const p = S.clampTarget(aim, range, _pv);
     if (!S.previewTele || S.previewKey !== key) {
@@ -351,13 +364,14 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
   const _pv = new V3(), _white = new T.Color(0.85, 0.88, 1.0);
 
   // ---------------- cast ----------------
-  S.ready = function (key) { return S.cd[key] <= 0; };
+  S.lock = 0; // the Witness's sentence: no powers for a moment
+  S.ready = function (key) { return S.cd[key] <= 0 && S.lock <= 0; };
 
   S.cast = function (key, aim) {
     if (!S.ready(key)) return false;
     const P = U.player;
     const fn = { Q: castQ, E: castE, R: castR, T: castT, Y: castY }[key];
-    S.cd[key] = S.DEFS[key].cd;
+    S.cd[key] = S.cdOf(key);
     const c = fn(P, aim);
     if (c) S.active.push(c);
     // every cast costs something: the seal on his chest flares, the edges of the world darken
@@ -375,6 +389,7 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
       }
     }
     S.freeze = Math.max(0, S.freeze - dt);
+    S.lock = Math.max(0, S.lock - dt);
     S.strain = Math.max(0, S.strain - dt * 0.07);
     U.world.strain = U.smooth(U.clamp((S.strain - 0.15) / 0.75, 0, 1));
     if (U.audio.setStrain) U.audio.setStrain(S.strain);
@@ -431,7 +446,7 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
           any = true;
           const hp = _c.copy(e.pos).setY(e.type === 'idol' ? 1.75 : 1.2);
           U.enemies.hit(e, dmg * mult, { mark: T_.qMark });
-          if (first) U.enemies.pin(e, T_.qPin);
+          if (first) U.enemies.pin(e, m.qPin);
           FX.fracture(hp, (1.0 + width) * (0.6 + 0.4 * mult), 0.34);
           FX.sparks(hp, first ? 14 : 8, { speed: 6, dir: _d.copy(dir).negate(), bias: 0.5, life: 0.3, size: 0.09, grav: 2 });
           FX.shards(hp, first ? 4 : 2, { bright: true, speed: 4, size: 0.07, life: 0.4, grav: 2 });
@@ -706,7 +721,8 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
     S.rShadow.mesh.visible = true;
     const sh = S.rShadow.mat.uniforms;
     sh.uOpacity.value = 0; sh.uHead.value = 0; sh.uTail.value = 0;
-    const tear = { open: false, origin: new V3(), r: T_.rRange * 0.6, aimYaw, y0: yawStart, y1: yawEnd, t: 0, side: new Map(), cool: new Map(), eyeKick: 0 };
+    const um = S.upgradeMult();
+    const tear = { L: um.rTear, recut: um.rRecut, open: false, origin: new V3(), r: T_.rRange * 0.6, aimYaw, y0: yawStart, y1: yawEnd, t: 0, side: new Map(), cool: new Map(), eyeKick: 0 };
     const c = {
       t: 0, done: false, swung: false, firstHit: false,
       startSwing() {
@@ -828,7 +844,7 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
       },
       updateTear(dt) {
         tear.t += dt;
-        const tt = tear.t, L = T_.rTear;
+        const tt = tear.t, L = tear.L;
         const u = S.rift.mat.uniforms;
         u.uOpen.value = U.easeOutCubic(U.clamp(tt / 0.25, 0, 1)) * (1 - U.smooth(U.clamp((tt - (L - 0.45)) / 0.45, 0, 1)));
         u.uOpacity.value = 1;
@@ -850,7 +866,7 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
           if ((prev != null && prev !== side) || Math.abs(d - tear.r) < en.radius * 0.6) {
             tear.cool.set(en, 0.8);
             const n = _a.set(dx, 0, dz).normalize().multiplyScalar(-side);
-            U.enemies.hit(en, T_.rRecut, { dir: n, knock: 3, stagger: 0.4 });
+            U.enemies.hit(en, tear.recut, { dir: n, knock: 3, stagger: 0.4, poise: 0.6 });
             if (en.alive) U.enemies.split(en, Math.random() < 0.5 ? -1 : 1, T_.rSplit * 0.6);
             const hp = _c.copy(en.pos).setY(1.2);
             FX.sparks(hp, 14, { speed: 6, life: 0.3, size: 0.09, grav: 2 });
@@ -913,7 +929,7 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
     const center = S.clampTarget(aim, T_.tRange, new V3());
     let f = S.fields.find((x) => !x.active);
     if (!f) { f = S.fields[0]; collapse(f); }
-    f.active = true; f.ending = false; f.dead = false; f.t = 0; f.pos.copy(center); f.r = T_.tRadius;
+    f.active = true; f.ending = false; f.dead = false; f.t = 0; f.pos.copy(center); const um = S.upgradeMult(); f.r = um.tRadius; f.dur = um.tDur;
     f.last.clear(); f.replay.length = 0; f.stut = 0; f.skip = false; f.collapsed = false;
     f.disc.position.set(center.x, 0.075, center.z);
     const size = f.r + 0.3; f.disc.scale.set(size, size, 1); f.mat.uniforms.uSize.value = size;
@@ -947,8 +963,10 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
       if (!f.active) continue;
       f.t += dt;
       const appear = U.easeOutCubic(U.clamp(f.t / 0.3, 0, 1));
-      const end = U.clamp((f.t - T_.tDur) / 0.4, 0, 1);
-      if (f.t >= T_.tDur) collapse(f);
+      const end = U.clamp((f.t - f.dur) / 0.4, 0, 1);
+      if (f.t >= f.dur) collapse(f);
+      // Revised Second: Vaust mends inside his own missing time
+      if (!f.ending && U.player.alive && U.player.hasRelic('revised') && Math.hypot(U.player.pos.x - f.pos.x, U.player.pos.z - f.pos.z) <= f.r) U.player.heal(5 * dt);
       // the clock crawls, then the missing time arrives at once
       if (!f.ending) {
         f.stut += dt;
@@ -961,7 +979,7 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
       } else f.spin -= dt * 3; // and runs back as it collapses
       f.mat.uniforms.uSpin.value = f.spin;
       f.mat.uniforms.uR.value = f.r * appear * (1 - end * 0.25);
-      f.mat.uniforms.uAlpha.value = appear * (1 - end) * (f.t > T_.tDur - 0.6 && f.t < T_.tDur ? 0.75 + 0.25 * Math.sin(f.t * 30) : 1);
+      f.mat.uniforms.uAlpha.value = appear * (1 - end) * (f.t > f.dur - 0.6 && f.t < f.dur ? 0.75 + 0.25 * Math.sin(f.t * 30) : 1);
       // replay the remembered wounds
       if (f.replay.length) {
         S._replaying = true;
@@ -1050,6 +1068,7 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
           if (!this.conv) { this.conv = true; FX.ring({ pos: center, r0: T_.yRadius, r1: 0.6, dur: CH * 0.95, w0: 0.05, w1: 0.2, opacity: 0.55, ease: U.easeInCubic, fadePow: 6 }); }
         } else if (!this.released) {
           this.released = true;
+          if (U.bosses.onSealCast) U.bosses.onSealCast(center, T_.yRadius);
           U.world.dim = 0;
           U.world.sealPulse = 1;
           U.audio.play('yBurst');
@@ -1081,6 +1100,7 @@ uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x 
           for (const e of U.enemies.list) {
             if (erased.has(e) || !e.alive) continue;
             const d = Math.hypot(e.pos.x - center.x, e.pos.z - center.z);
+            if (e.isBoss) continue; // a keeper cannot simply be deleted (see onSealCast)
             if (d <= T_.yRadius + e.radius && d <= front + e.radius) { erased.add(e); U.enemies.kill(e, { erase: true }); }
           }
           if (!this.dreaded && rt > 0.42) { this.dreaded = true; U.enemies.dread(center, 60, 2.5); }

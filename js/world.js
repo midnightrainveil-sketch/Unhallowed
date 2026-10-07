@@ -231,11 +231,11 @@
   function buildEclipse() {
     const R = 36, S = 3.4;
     const mat = new T.ShaderMaterial({
-      uniforms: { uTime: U.shared.uTime, uDim: { value: 0 }, uEye: { value: 0 } },
+      uniforms: { uTime: U.shared.uTime, uDim: { value: 0 }, uEye: { value: 0 }, uCrack: { value: 0 } },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: `
 #define sq(x) ((x)*(x))
-        uniform float uTime, uDim, uEye; varying vec2 vUv;
+        uniform float uTime, uDim, uEye, uCrack; varying vec2 vUv;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
         float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
@@ -248,6 +248,16 @@
           float glow = exp(-off * 1.6) * 0.32 + exp(-off * 6.0) * 0.55;
           glow *= 0.6 + 0.6 * n;
           float brk = smoothstep(0.03, 0.12, abs(sin(th * 2.5 + 0.9))) * smoothstep(0.02, 0.08, abs(sin(th * 4.0 - 1.3)));
+          // each time the seal is rewritten the eclipse breaks a little more
+          float cracks = 0.0;
+          for (int i = 0; i < 8; i++) {
+            if (float(i) < uCrack) {
+              float ca = float(i) * 2.399 + 0.7;
+              brk *= smoothstep(0.012, 0.05, abs(sin((th - ca) * 0.5)));
+              float wob = sin(d * 23.0 + float(i) * 5.0) * 0.012;
+              cracks += exp(-sq((abs(sin((th - ca - wob) * 0.5)) * d) / 0.006)) * step(0.45 + 0.05 * float(i), d) * step(d, 1.0);
+            }
+          }
           float ring = (exp(-sq((d - 1.0) / 0.018)) * 9.0 + exp(-sq((d - 1.0) / 0.07)) * 1.4) * mix(0.15, 1.0, brk);
           float a1 = exp(-sq((d - 1.55) / 0.012)) * step(0.32, fract(th / 6.2832 * 3.0 + 0.1));
           float a2 = exp(-sq((d - 2.2) / 0.011)) * step(0.45, fract(th / 6.2832 * 5.0 + 0.35));
@@ -257,7 +267,7 @@
           vec3 light = vec3(0.86, 0.88, 0.96) * glow + vec3(1.0, 1.0, 1.05) * ring + vec3(0.92, 0.94, 1.0) * (a1 * 2.4 + a2 * 1.7 + a3 * 1.3 + spokes * 0.9);
           light *= fade * (1.0 - uDim * 0.5);
           float disc = (1.0 - smoothstep(0.985, 1.0, d));
-          vec3 discCol = vec3(0.006, 0.006, 0.008) + n * 0.012;
+          vec3 discCol = vec3(0.006, 0.006, 0.008) + n * 0.012 + vec3(1.1, 1.12, 1.2) * min(cracks, 1.0);
           // when the seal objects, the eclipse opens an eye and looks down at the courtyard
           if (uEye > 0.001) {
             vec2 e = vec2(p.x, p.y + 0.04);
@@ -793,7 +803,14 @@
   W.addShake = function (amount) { W.shake.trauma = Math.min(1, W.shake.trauma + amount); };
 
   W.lookHeight = 0.9; // frame the chest rather than the feet
+  // `wide` eases the camera back and up for fights against things too large for the usual framing
+  W.wide = 0; W.wideTarget = 0;
   W.followCamera = function (target, dt, snap) {
+    const C = U.CONST;
+    W.wide = snap ? W.wideTarget : U.damp(W.wide, W.wideTarget, 1.6, dt);
+    const pitch = U.lerp(C.CAM_PITCH, 29 * Math.PI / 180, W.wide), dist = U.lerp(C.CAM_DIST, 15.2, W.wide);
+    W.camOffset.set(0, Math.sin(pitch) * dist, Math.cos(pitch) * dist - 2.6 * W.wide);
+    W.camera.rotation.x = -pitch;
     const ty = target.y + W.lookHeight;
     if (snap) W.camTarget.set(target.x, ty, target.z);
     else {
@@ -836,7 +853,7 @@
     W.fill.intensity = W.baseLight.fill * k;
     W.heroLight.intensity = W.baseLight.hero * (1 - W.dim * 0.7);
     W.sky.material.uniforms.uDim.value = W.dim;
-    W.eclipse.material.uniforms.uDim.value = W.dim;
+    W.eclipse.material.uniforms.uDim.value = Math.max(W.dim, W.hollow);
     W.grade.uniforms.uDim.value = W.dim * 0.7;
     W.seal.material.opacity = 0.2 + W.sealPulse * 0.6;
     W.eclipse.material.uniforms.uEye.value = W.eye;
@@ -847,7 +864,8 @@
     _v.copy(W.keyDir).transformDirection(W.camera.matrixWorldInverse);
     U.shared.uRimDir.value.copy(_v);
   };
-  W.sealPulse = 0; W.eye = 0; W.neg = 0; W.strain = 0;
+  W.sealPulse = 0; W.eye = 0; W.neg = 0; W.strain = 0; W.hollow = 0;
+  W.setCracks = function (n) { if (W.eclipse) W.eclipse.material.uniforms.uCrack.value = Math.min(8, n); };
 
   W.render = function (rt) {
     W.grade.uniforms.uTime.value = rt;

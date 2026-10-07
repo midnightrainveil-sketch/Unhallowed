@@ -207,6 +207,53 @@
       ping(220, 0.08, 2.4, 0.15);
       tone({ type: 'sine', f0: 110, f1: 104, attack: 0.3, hold: 0.6, dur: 1.6, gain: 0.08, delay: 0.1 });
     },
+    // ---- the keepers ----
+    bossIntro() {
+      tone({ type: 'sawtooth', f0: 41, f1: 55, attack: 0.6, hold: 0.8, dur: 1.4, gain: 0.14, lp: 220, lp1: 900, lpq: 3 });
+      tone({ type: 'sine', f0: 82, f1: 78, attack: 0.4, hold: 1.0, dur: 1.5, gain: 0.14 });
+      noise({ type: 'bandpass', f0: 120, f1: 600, q: 3, attack: 0.8, hold: 0.4, dur: 1.2, gain: 0.25 });
+      ping(220, 0.08, 2.5, 0.5); ping(233, 0.05, 2.5, 0.55);
+    },
+    roar() {
+      noise({ type: 'bandpass', f0: 260, f1: 140, q: 1.5, attack: 0.08, hold: 0.5, dur: 0.6, gain: 0.5 });
+      tone({ type: 'sawtooth', f0: 70, f1: 46, attack: 0.08, hold: 0.5, dur: 0.6, gain: 0.16, lp: 500 });
+      tone({ type: 'square', f0: 140, f1: 92, attack: 0.1, hold: 0.4, dur: 0.5, gain: 0.04, lp: 900 });
+    },
+    chain() {
+      for (let i = 0; i < 7; i++) ping(1800 + Math.random() * 1600, 0.025, 0.15, i * 0.035);
+      noise({ type: 'highpass', f0: 3000, q: 0.7, dur: 0.25, gain: 0.12 });
+    },
+    chainHit() {
+      ping(900, 0.08, 0.5); ping(1340, 0.05, 0.4, 0.02);
+      noise({ type: 'bandpass', f0: 1800, q: 2, dur: 0.1, gain: 0.25 });
+      tone({ type: 'sine', f0: 120, f1: 60, dur: 0.2, gain: 0.3 });
+    },
+    tetherBreak() {
+      for (let i = 0; i < 10; i++) ping(1500 + Math.random() * 3000, 0.03, 0.3, Math.random() * 0.1);
+      noise({ type: 'highpass', f0: 2500, q: 0.7, dur: 0.3, gain: 0.25 });
+    },
+    slamLand() {
+      noise({ type: 'lowpass', f0: 900, f1: 60, q: 1, dur: 0.6, gain: 0.7 });
+      tone({ type: 'sine', f0: 70, f1: 26, dur: 0.6, gain: 0.7 });
+      noise({ type: 'bandpass', f0: 2200, q: 1.5, dur: 0.08, gain: 0.2 });
+    },
+    poiseBreak() {
+      ping(520, 0.1, 1.0); ping(780, 0.07, 0.8, 0.03);
+      noise({ type: 'bandpass', f0: 3000, f1: 800, q: 2, dur: 0.3, gain: 0.25 });
+      tone({ type: 'sine', f0: 150, f1: 50, dur: 0.4, gain: 0.35 });
+    },
+    bossDeath() {
+      tone({ type: 'sawtooth', f0: 110, f1: 27, attack: 0.02, hold: 0.6, dur: 2.2, gain: 0.18, lp: 1200, lp1: 90 });
+      tone({ type: 'sine', f0: 55, f1: 30, attack: 0.02, hold: 0.8, dur: 2.0, gain: 0.5 });
+      noise({ type: 'lowpass', f0: 5000, f1: 120, q: 0.7, attack: 0.01, hold: 0.4, dur: 2.0, gain: 0.5 });
+      ping(440, 0.08, 3, 0.4); ping(660, 0.06, 3, 0.5); ping(330, 0.07, 3.2, 0.6);
+    },
+    sentence() {
+      tone({ type: 'sine', f0: 2600, f1: 2500, attack: 0.002, hold: 0.3, dur: 0.6, gain: 0.05 });
+      tone({ type: 'sine', f0: 2610, f1: 2505, attack: 0.002, hold: 0.3, dur: 0.6, gain: 0.05 });
+      noise({ type: 'highpass', f0: 4000, q: 0.7, dur: 0.5, gain: 0.2 });
+      tone({ type: 'sine', f0: 60, f1: 40, dur: 0.5, gain: 0.4 });
+    },
     hurt() {
       noise({ type: 'lowpass', f0: 1400, f1: 200, q: 1, dur: 0.18, gain: 0.45 });
       tone({ type: 'square', f0: 140, f1: 70, dur: 0.16, gain: 0.08, lp: 700 });

@@ -236,7 +236,8 @@
   FX.flash = function (pos, intensity, dist, dur, color) {
     let best = FX.lights[0];
     for (const l of FX.lights) { if (l.t >= l.dur) { best = l; break; } if (l.t / l.dur > best.t / best.dur) best = l; }
-    best.light.position.copy(pos);
+    // lift impact lights clear of nearby surfaces so they never sit against geometry
+    best.light.position.set(pos.x, Math.max(pos.y, 0.6) + 0.9, pos.z);
     best.light.distance = dist || 8;
     best.peak = intensity; best.t = 0; best.dur = dur || 0.25;
     best.light.color.copy(color || WHITE);

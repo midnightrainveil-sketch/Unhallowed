@@ -359,7 +359,7 @@
     uniform float uGlow;
     varying vec3 vViewPos;
     void main() {
-      vec3 n = normalize(cross(dFdx(vViewPos), dFdy(vViewPos)));
+      vec3 n = cross(dFdx(vViewPos), dFdy(vViewPos)); n = length(n) > 1e-12 ? normalize(n) : vec3(0.0, 0.0, 1.0);
       vec3 v = normalize(-vViewPos);
       float ndv = abs(dot(n, v));
       float fres = pow(1.0 - ndv, 2.2);

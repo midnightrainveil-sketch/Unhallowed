@@ -46,6 +46,18 @@
     composer.setPixelRatio(W.pixelRatio);
     composer.setSize(window.innerWidth, window.innerHeight);
     composer.addPass(new THREE.RenderPass(scene, camera));
+    // Guard the HDR buffer: very bright specular (a light right against metal) can overflow the
+    // half-float target to Inf, and the bloom blur would spread Inf/NaN into black blocks on real GPUs.
+    composer.addPass(new THREE.ShaderPass({
+      uniforms: { tDiffuse: { value: null } },
+      vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+      fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+        void main(){
+          vec4 c = texture2D(tDiffuse, vUv);
+          if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0);
+          gl_FragColor = vec4(clamp(c.rgb, 0.0, 32.0), clamp(c.a, 0.0, 1.0));
+        }`,
+    }));
     const bloom = new THREE.UnrealBloomPass(new T.Vector2(window.innerWidth, window.innerHeight), 0.62, 0.42, 0.9);
     composer.addPass(bloom);
     const grade = new THREE.ShaderPass(GradeShader);

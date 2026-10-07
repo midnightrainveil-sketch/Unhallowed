@@ -23,13 +23,13 @@ A desktop browser with WebGL2 is required. Use a mouse and keyboard.
 |---|---|
 | **W A S D** | Move (relative to the fixed camera; diagonals normalized) |
 | **Mouse** | Aim (ray onto the floor; facing is independent of movement) |
-| **Left mouse** | Two-hit sword combo — hold to repeat |
+| **Left mouse** | Two-hit sword combo — hold to repeat. The blade also *folds space*: aim at an enemy up to 14 m away and the cut lands on it anyway (less damage the farther it is). The second cut leaves the sword hanging in the air, and it swings again on its own 0.5 s later |
 | **Shift** (or Space) | Spectral dash — 3 charges, one recharges every 3 s |
-| **Q** | Needle Through Hours — piercing lance (4 s) |
-| **E** | Hands Beneath — hold to preview the area, release to cast (8 s) |
-| **R** | Sever the Veil — giant spectral blade sweeps a wide cone (10 s) |
-| **T** | The Missing Second — hold to preview, release: time field at half speed for 4 s (14 s) |
-| **1** | The Seal Objects — one massive radial rupture after a 1 s build-up (30 s, ready at start) |
+| **Q** | Needle Through Hours — the lance has *already* struck: everything on the line is hit at once, pinned in time for 0.6 s and marked; only then does the slit open and the lance fly backwards into it. 2 s later the line strikes again at half damage (4 s) |
+| **E** | Hands Beneath — hold to preview, release to cast. Many-fingered hands drag enemies waist-deep into the floor (+35% damage taken, can only strike forward), then pull them under and spit them out elsewhere, disoriented. Hands that catch nothing wait 3 s as traps (8 s) |
+| **R** | Sever the Veil — a giant blade, its shadow crossing the ground first. The cut stays open for 3 s: a rift with stars and an eye behind it that re-cuts anything crossing it and swallows Hex Idol shots. Cut bodies come apart and rejoin with a second wound (10 s) |
+| **T** | The Missing Second — hold to preview, release. Inside, time crawls then skips forward (≈ half speed overall), leaving afterimages; enemy shots stop dead. When it collapses, everything inside relives its last wound and the stopped shots fly back at whoever fired them (14 s) |
+| **1** | The Seal Objects — the seal refuses: the world freezes for 1 s as a photographic negative and every mask turns to Vaust; then everything inside the ring is erased, leaving only burned silhouettes. Survivors back away. It costs him — he is pressed to one knee (30 s, ready at start) |
 | **Right mouse** | Cancel an E/T preview |
 | **Esc** | Pause |
 | **1 / 2 / 3** | Choose an upgrade card |
@@ -39,7 +39,15 @@ A desktop browser with WebGL2 is required. Use a mouse and keyboard.
 Three waves of **Pursuers** (masked melee, offset approach, two-hit combo with a deliberate pause)
 and **Hex Idols** (floating constructs with aimed volleys and delayed ground eruptions).
 Every enemy attack is telegraphed in amber/crimson and its direction or position locks before it
-lands. After waves one and two, pick one of three upgrades (each can be taken twice):
+lands.
+
+Vaust's power is wrong in ways the courtyard remembers. **Marked** enemies (a pale glyph) take +30%
+damage, and a heavy blow detonates the mark. The floor stays damaged where he struck — floating
+slabs, cracks, mist running backwards — and enemies that witness the worst of it back away for a
+moment. Each cast flares the seal on his chest; using too much at once darkens the edges of the
+world and brings whispering (flavour only).
+
+After waves one and two, pick one of three upgrades (each can be taken twice):
 
 - **Widen the Wound** — Q is 25% wider and deals 20% more damage.
 - **More Hands Below** — E radius +25% (preview and hand ring included).

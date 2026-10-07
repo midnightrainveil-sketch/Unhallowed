@@ -16,10 +16,10 @@
 
   UI.UPGRADES = [
     { id: 'widen', key: 'Q', title: 'Widen the Wound', skill: 'Needle Through Hours',
-      desc: 'The slit tears wider. The lance’s visible and actual width grow, and it cuts deeper.',
+      desc: 'The line it has already struck grows wider, and the wound goes deeper.',
       effect: (n) => `Q width +25% · Q damage +20%  (now ×${Math.pow(1.25, n).toFixed(2)} / ×${Math.pow(1.2, n).toFixed(2)})` },
     { id: 'hands', key: 'E', title: 'More Hands Below', skill: 'Hands Beneath',
-      desc: 'More hands answer from beneath the stone. The grasp reaches farther and gathers more.',
+      desc: 'More hands answer from beneath the stone, and each has more fingers than it should. The grasp reaches farther.',
       effect: (n) => `E radius +25%, preview and hand ring included  (now ×${Math.pow(1.25, n).toFixed(2)})` },
     { id: 'absence', key: 'dodge', title: 'A Shorter Absence', skill: 'Spectral Dash',
       desc: 'Vaust returns from the between-place sooner. Each dodge charge recovers faster.',
@@ -228,6 +228,17 @@
     if (key === 'Y' || key === 'R') U.audio.play('ready', { gap: 0.3 });
   };
   UI.onNotReady = function () {};
+  // after The Seal Objects the other powers gutter like candles for a moment
+  UI.flicker = function (dur) {
+    for (const k of U.skills.KEYS) {
+      if (k === 'Y') continue;
+      const el = UI.slots[k].el;
+      el.classList.remove('flicker'); void el.offsetWidth; el.classList.add('flicker');
+      el.style.setProperty('--flicker', dur + 's');
+    }
+    clearTimeout(UI._flickerT);
+    UI._flickerT = setTimeout(() => { for (const k of U.skills.KEYS) UI.slots[k].el.classList.remove('flicker'); }, dur * 1000);
+  };
 
   // ---------- overlays ----------
   UI.showUpgrades = function (waveDone, onPick) {

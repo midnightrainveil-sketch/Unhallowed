@@ -97,6 +97,16 @@
     return m;
   }
 
+  // ---------------- the "unwritten" mark (billboard glyph) ----------------
+  let glyphMat = null;
+  function makeGlyph(parent, y) {
+    if (!glyphMat) glyphMat = new T.MeshBasicMaterial({ map: U.tex.glyph, color: new T.Color(2.2, 2.25, 2.5), transparent: true, depthWrite: false, depthTest: false, blending: T.AdditiveBlending });
+    const m = new T.Mesh(new T.PlaneGeometry(0.62, 0.62), glyphMat);
+    m.position.y = y; m.visible = false; m.renderOrder = 22; m.userData.noGhost = true;
+    parent.add(m);
+    return m;
+  }
+
   // ---------------- health bar (billboard) ----------------
   function makeBar(parent, y, w) {
     const g = geoms();
@@ -164,7 +174,8 @@
     }
     root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     const bar = makeBar(root, 2.25, 0.8);
-    return { root, body, hips, legs, spine, chest, head, arms, strips, mats, bar };
+    const glyph = makeGlyph(root, 2.55);
+    return { root, body, hips, legs, spine, chest, head, arms, strips, mats, bar, glyph };
   }
 
   // ---------------- Hex Idol ----------------
@@ -192,9 +203,11 @@
     }
     const glow = new T.Mesh(new T.PlaneGeometry(3.2, 3.2), mats.glow);
     glow.rotation.x = -Math.PI / 2; glow.position.y = 0.05; glow.renderOrder = 2;
+    glow.userData.noGhost = true; inner.userData.noGhost = true;
     root.add(glow);
     const bar = makeBar(root, 3.25, 0.8);
-    return { root, float, core, inner, eye, ring, ring2, frags, mats, glow, bar };
+    const glyph = makeGlyph(root, 3.6);
+    return { root, float, core, inner, eye, ring, ring2, frags, mats, glow, bar, glyph };
   }
 
   // ---------------- Enemy object ----------------
@@ -233,6 +246,13 @@
       this.lockYaw = 0; this.lockPos = new V3();
       this.didHit = false;
       this.barShow = 0;
+      // Vaust's influence on this body
+      this.mark = 0; this.pinT = 0; this.pinSnap = this.pinSnap || new V3();
+      this.grip = null; this.under = false; this.sink = 0;
+      this.splitT = 0; this.splitDir = 1; this.splitDmg = 0;
+      this.dreadDur = 0;
+      if (this.rig.spine) this.rig.spine.position.x = 0;
+      this.rig.glyph.visible = false;
       this.root.visible = true;
       this.root.scale.setScalar(1);
       this.root.rotation.set(0, this.facing, 0);
@@ -277,9 +297,11 @@
       glow.scale.set(0.9, 0.9, 1); grp.add(glow);
       grp.visible = false;
       scene.add(grp);
-      E.projectiles.push({ grp, active: false, pos: grp.position, vel: new V3(), life: 0 });
+      E.projectiles.push({ grp, mesh: m, glow, active: false, pos: grp.position, vel: new V3(), life: 0, owner: null, held: false, reversed: false });
     }
     void gmat;
+    E.projMat = pmat;
+    E.projMatRev = new T.MeshBasicMaterial({ color: new T.Color(2.4, 2.45, 2.7) });
     // eruptions
     E.eruptions = [];
     const smat = U.stdMat({ color: 0x17171b, roughness: 0.7, metalness: 0.3, emissive: new T.Color(0.16, 0.03, 0.022) }, 0.5, 2.0);
@@ -307,7 +329,7 @@
     for (const e of E.list) { e.clearTeles(); e.root.visible = false; e.alive = false; e.active = false; e.token = false; }
     E.list.length = 0;
     E.attackers = 0;
-    for (const p of E.projectiles) { p.active = false; p.grp.visible = false; }
+    for (const p of E.projectiles) { p.active = false; p.grp.visible = false; p.held = false; p.reversed = false; }
     for (const er of E.eruptions) { er.active = false; er.grp.visible = false; if (er.tele) { er.tele.release(); er.tele = null; } }
   };
 
@@ -338,8 +360,18 @@
 
   // damage an enemy. o: {dir (V3 push direction), knock, heavy, stagger, root, quiet}
   E.hit = function (e, dmg, o) {
-    if (!e.alive || e.state === 'dying') return false;
+    if (!e.alive || e.state === 'dying' || e.under) return false;
     o = o || {};
+    if (e.mark > 0) dmg *= 1.3;                       // unwritten things come apart more easily
+    if (e.grip && e.grip.phase === 'hold') dmg *= 1.35; // half-swallowed by the floor
+    if (o.mark) { e.mark = Math.max(e.mark, o.mark); e.rig.glyph.visible = true; }
+    else if (o.heavy && e.mark > 0) {
+      // a heavy blow detonates the mark
+      e.mark = 0; e.rig.glyph.visible = false; dmg += 15;
+      const gp = _tmp3.copy(e.pos).setY(e.type === 'idol' ? 2.2 : 1.6);
+      FX.fracture(gp, 1.6, 0.4); FX.shards(gp, 8, { bright: true, speed: 6, size: 0.08, life: 0.5, grav: 1 });
+    }
+    if (U.skills.recordHit) U.skills.recordHit(e, dmg);
     e.hp -= dmg;
     e.flash = 1;
     e.flinch = Math.min(1, e.flinch + (o.heavy ? 1 : 0.6));
@@ -350,7 +382,7 @@
       e.knock.add(_tmp);
     }
     if (e.hp <= 0) { E.kill(e, o); return true; }
-    const interruptible = ['windup1', 'windup2', 'gap', 'volleyWind', 'volleyMid', 'eruptWind', 'approach', 'strafe', 'drift'];
+    const interruptible = ['windup1', 'windup2', 'gap', 'volleyWind', 'volleyMid', 'eruptWind', 'approach', 'strafe', 'drift', 'dread'];
     if ((o.heavy || o.stagger) && interruptible.indexOf(e.state) >= 0) {
       e.clearTeles(); e.releaseToken();
       e.setState('stagger');
@@ -367,7 +399,25 @@
     e.alive = false;
     e.clearTeles(); e.releaseToken();
     e.state = 'dying'; e.st = 0;
+    e.grip = null; e.under = false; e.pinT = 0;
+    e.rig.glyph.visible = false; e.rig.bar.grp.visible = false;
+    if (o && o.erase) {
+      // deleted, not killed: only a silhouette burned into the stone remains
+      e.pos.y = 0;
+      if (e.rig.spine) e.rig.spine.position.x = 0;
+      FX.ghostOf(e.root, { mode: 'burn', opacity: 0.92, hold: 1.6, dur: 3.4 });
+      FX.ghostOf(e.root, { opacity: 0.9, dur: 0.35 });
+      FX.ring({ pos: e.pos, r0: 0.95, r1: 1.0, dur: 5, w0: 0.6, w1: 0.6, color: _black, opacity: 0.85, normal: true, fill: 0.9, innerFade: 1.0, fadePow: 3 });
+      e.root.visible = false;
+      e.active = false;
+      if (U.game) U.game.onEnemyKilled(e);
+      return;
+    }
     const c = _tmp.copy(e.pos).setY(e.type === 'idol' ? IDOL.hover : 1.1);
+    if (o && o.heavy && e.type === 'pursuer') {
+      // the blades drop from its hands
+      FX.shards(_tmp2.copy(e.pos).setY(1.2), 2, { speed: 2.5, up: 1.5, size: 0.42, life: 2.4, colors: [COL.metal], drag: 0.3 });
+    }
     const dir = o && o.dir ? _tmp2.copy(o.dir).setY(0.4).normalize() : null;
     if (e.type === 'pursuer') {
       FX.shards(c, 26, { speed: 6.5, size: 0.17, life: 1.4, spread: 0.7, yspread: 2.2, colors: [COL.dark, COL.dark, COL.bone, COL.metal], dir, bias: 0.35 });
@@ -385,53 +435,216 @@
     e.active = false;
     if (U.game) U.game.onEnemyKilled(e);
   };
+  const _black = new T.Color(0, 0, 0);
   const COL = {
     dark: new T.Color(0.11, 0.11, 0.13), bone: new T.Color(0.62, 0.6, 0.55), metal: new T.Color(0.38, 0.39, 0.42),
     obsidian: new T.Color(0.07, 0.07, 0.09), ember: new T.Color(0.9, 0.35, 0.15),
   };
 
+  // ---------------- Vaust's effects on bodies ----------------
+  // Pin in time: the body freezes while a ghost plays where it is about to be; then it snaps there.
+  E.pin = function (e, dur) {
+    if (!e.alive || e.under) return;
+    const v = e.pinSnap;
+    if (e.type === 'pursuer' && (e.state === 'approach' || e.state === 'strafe')) {
+      const P = U.player.pos, dx = P.x - e.pos.x, dz = P.z - e.pos.z, d = Math.hypot(dx, dz) || 1;
+      const step = Math.min(PURSUER.speed * 0.55, Math.max(0, d - 1.6));
+      v.set(dx / d * step, 0, dz / d * step);
+    } else v.set(e.vel.x * 0.55, 0, e.vel.z * 0.55);
+    // keep the destination inside the courtyard
+    _tmp2.copy(e.pos).add(v); U.arenaClamp(_tmp2, e.radius); v.copy(_tmp2).sub(e.pos).setY(0);
+    e.pinT = dur;
+    FX.ghostOf(e.root, { offset: v, opacity: 0.38, hold: Math.max(0, dur - 0.12), dur: 0.15, fadeIn: 0.12 });
+  };
+  function snapPin(e) {
+    FX.ghostOf(e.root, { opacity: 0.3, dur: 0.25 });
+    e.pos.add(e.pinSnap); U.arenaClamp(e.pos, e.radius);
+    FX.sparks(_tmp.copy(e.pos).setY(1.1), 6, { speed: 2.5, life: 0.25, size: 0.07, grav: 0 });
+    U.audio.play('pin', { gap: 0.05 });
+  }
+
+  // Dread: things that witness Vaust's power back away and will not come for a moment.
+  E.dread = function (center, radius, dur) {
+    for (const e of E.list) {
+      if (!e.alive || e.under || e.grip || e.pinT > 0) continue;
+      if (Math.hypot(e.pos.x - center.x, e.pos.z - center.z) > radius) continue;
+      const calm = e.type === 'pursuer' ? ['approach', 'strafe', 'recovery', 'idle'] : ['drift', 'recover'];
+      if (calm.indexOf(e.state) < 0) continue;
+      e.releaseToken();
+      e.setState('dread'); e.dreadDur = dur * (0.8 + Math.random() * 0.4);
+    }
+  };
+
+  // Hands Beneath: held half-sunk in the floor, then pulled fully under and spat out elsewhere.
+  E.grab = function (e, center, R, hold) {
+    if (!e.alive || e.under) return;
+    e.grip = { phase: 'hold', t: 0, center: center.clone(), R, hold };
+    e.rootT = Math.max(e.rootT, hold + 1.2);
+  };
+  function updateGrip(e, dt) {
+    const g = e.grip;
+    g.t += dt;
+    if (g.phase === 'hold') {
+      e.sink = U.damp(e.sink, e.type === 'idol' ? 1.1 : 0.85, 10, dt);
+      if (Math.random() < dt * 6) FX.sparks(_tmp.copy(e.pos).setY(0.1), 1, { speed: 1.2, up: 1, life: 0.4, size: 0.06, grav: 0 });
+      if (g.t >= g.hold) { g.phase = 'down'; g.t = 0; U.audio.play('eGrasp', { gap: 0.05 }); FX.ring({ pos: e.pos, r0: 1.0, r1: 0.2, dur: 0.3, w0: 0.08, w1: 0.03, opacity: 0.8 }); }
+    } else if (g.phase === 'down') {
+      e.sink = U.lerp(0.85, 2.6, U.easeInCubic(U.clamp(g.t / 0.28, 0, 1)));
+      e.under = e.sink > 1.7;
+      if (g.t >= 0.28) { g.phase = 'gone'; g.t = 0; e.root.visible = false; }
+    } else if (g.phase === 'gone') {
+      if (g.t >= 0.3) {
+        const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * g.R * 0.85;
+        e.pos.set(g.center.x + Math.sin(a) * r, 0, g.center.z + Math.cos(a) * r);
+        U.arenaClamp(e.pos, e.radius);
+        e.root.visible = true;
+        g.phase = 'up'; g.t = 0;
+        FX.ring({ pos: e.pos, r0: 0.2, r1: 1.3, dur: 0.35, w0: 0.1, w1: 0.03, opacity: 0.8 });
+        FX.mist(_tmp.copy(e.pos).setY(0.3), 3, { spread: 0.4, rise: 1.2, life: 0.8, size: 0.8, a: 0.22 });
+      }
+    } else if (g.phase === 'up') {
+      e.sink = U.lerp(2.6, 0, U.easeOutCubic(U.clamp(g.t / 0.3, 0, 1)));
+      e.under = e.sink > 1.7;
+      if (g.t >= 0.3) {
+        e.sink = 0; e.under = false; e.grip = null; e.rootT = 0;
+        e.clearTeles(); e.releaseToken();
+        e.setState('stagger'); e.staggerDur = 0.7; // disoriented
+      }
+    }
+  }
+
+  // Sever the Veil: the body is cut through; its halves sit offset, then rejoin with a second wound.
+  E.split = function (e, dir, dmg) {
+    if (!e.alive) return;
+    e.splitT = 0.8; e.splitDir = dir; e.splitDmg = dmg;
+  };
+
+  // reverse projectiles that hung in a collapsing Missing Second field
+  E.reverseHeld = function (field) {
+    for (const p of E.projectiles) {
+      if (!p.active || !p.held || p.heldField !== field) continue;
+      p.held = false; p.reversed = true; p.life = 0;
+      const o = p.owner && p.owner.alive ? p.owner.pos : null;
+      if (o) p.vel.set(o.x - p.pos.x, 0, o.z - p.pos.z).normalize().multiplyScalar(13);
+      else p.vel.multiplyScalar(-1.3);
+      p.grp.rotation.set(0, Math.atan2(p.vel.x, p.vel.z), 0);
+      p.mesh.material = E.projMatRev; p.glow.material.color.setRGB(1.4, 1.42, 1.6);
+      FX.sparks(p.pos, 6, { speed: 3, life: 0.3, size: 0.08, grav: 0 });
+    }
+  };
+
   // ---------------- per-frame ----------------
   E.update = function (dt) {
-    const P = U.player;
+    const P = U.player, S = U.skills;
     for (let i = E.list.length - 1; i >= 0; i--) if (!E.list[i].active) E.list.splice(i, 1);
+    const frozen = S.freeze > 0;
     for (let i = E.list.length - 1; i >= 0; i--) {
       const e = E.list[i];
       if (!e.active) continue;
-      e.timeScale = U.skills.timeScaleAt(e.pos);
-      const edt = dt * e.timeScale;
-      e.animT += edt;
-      e.st += edt;
       e.flash = Math.max(0, e.flash - dt * 6);
-      e.flinch = Math.max(0, e.flinch - edt * 5);
-      e.rootT = Math.max(0, e.rootT - edt);
       e.barShow = Math.max(0, e.barShow - dt);
-      if (e.type === 'pursuer') updatePursuer(e, edt, P);
-      else updateIdol(e, edt, P);
+      if (frozen) {
+        // the seal objects: nothing moves, but every mask turns toward him
+        if (e.alive && !e.under) { faceTo(e, P.pos.x, P.pos.z, 2.2, dt); e.root.rotation.y = e.facing; }
+        updateBar(e); updateGlyph(e, 0);
+        continue;
+      }
+      if (e.grip) {
+        updateGrip(e, dt);
+        e.pos.y = -e.sink;
+        if (e.grip && e.grip.phase !== 'hold') { updateBar(e); updateGlyph(e, dt); continue; }
+      }
+      e.timeScale = S.timeScaleAt(e.pos);
+      if (e.pinT > 0) {
+        // pinned in time: the body hangs while its next half-second plays out ahead of it
+        e.pinT -= dt;
+        if (e.pinT > 0) { tint(e); updateBar(e); updateGlyph(e, dt); continue; }
+        e.pinT = 0; snapPin(e);
+      }
+      const f0 = e.facing;
+      stepEnemy(e, dt * e.timeScale, P);
       if (!e.active) continue;
-      // knockback & separation
-      e.pos.addScaledVector(e.knock, edt);
-      e.knock.multiplyScalar(Math.exp(-7 * edt));
-      for (const o of E.list) {
-        if (o === e || !o.active) continue;
-        const dx = e.pos.x - o.pos.x, dz = e.pos.z - o.pos.z;
-        const d = Math.hypot(dx, dz), min = e.radius + o.radius + 0.1;
-        if (d < min && d > 1e-4) { const push = (min - d) * 0.5; e.pos.x += (dx / d) * push; e.pos.z += (dz / d) * push; }
+      // The Missing Second stutters: a crawl, then the lost moment arrives all at once
+      if (e.timeScale < 0.99 && e.alive && S.skipAt(e.pos)) {
+        const skip = S.TUNE.tStutter * Math.max(0, S.TUNE.tScale - e.timeScale);
+        if (skip > 0) {
+          FX.ghostOf(e.root, { opacity: 0.3, dur: 0.55 });
+          for (let k = 0; k < 4 && e.active; k++) stepEnemy(e, skip / 4, P);
+          if (!e.active) continue;
+        }
       }
-      // keep inside the courtyard
-      U.arenaClamp(e.pos, e.radius);
-      e.root.rotation.y = e.facing;
-      // hit flash & slow tint
-      const fl = e.flash * e.flash;
-      for (const k in e.rig.mats) {
-        const m = e.rig.mats[k];
-        if (k === 'blade' || k === 'frag') continue; // these carry the amber wind-up glow
-        if (m.emissive && m.userData.rimStrength) m.emissive.setRGB(fl * 0.9 + (e.timeScale < 1 ? 0.03 : 0), fl * 0.9 + (e.timeScale < 1 ? 0.035 : 0), fl * 0.95 + (e.timeScale < 1 ? 0.06 : 0));
+      // half-swallowed bodies can only strike at what is in front of them
+      if (e.grip) e.facing = f0, e.root.rotation.y = f0;
+      // severed: the halves sit apart, then rejoin with a second wound
+      if (e.splitT > 0) {
+        e.splitT -= dt * e.timeScale;
+        const off = e.splitDir * 0.34 * U.clamp(e.splitT / 0.12, 0, 1) * (1 + Math.sin(e.animT * 40) * 0.08);
+        if (e.type === 'pursuer') e.rig.spine.position.x = off; else e.rig.float.position.x = off;
+        if (e.splitT <= 0) {
+          e.splitT = 0;
+          if (e.type === 'pursuer') e.rig.spine.position.x = 0; else e.rig.float.position.x = 0;
+          const c = _tmp.copy(e.pos).setY(e.type === 'idol' ? 2.0 : 1.3);
+          FX.fracture(c, 1.2, 0.35);
+          FX.shards(c, 6, { bright: true, speed: 4, size: 0.07, life: 0.4, grav: 2 });
+          U.audio.play('qhit', { gap: 0.05 });
+          E.hit(e, e.splitDmg, { stagger: 0.3 });
+          if (!e.active) continue;
+        }
       }
+      tint(e);
       updateBar(e);
+      updateGlyph(e, dt);
     }
-    updateProjectiles(dt, P);
-    updateEruptions(dt, P);
+    updateProjectiles(frozen ? 0 : dt, P);
+    updateEruptions(frozen ? 0 : dt, P);
   };
+
+  function stepEnemy(e, edt, P) {
+    e.animT += edt;
+    e.st += edt;
+    e.flinch = Math.max(0, e.flinch - edt * 5);
+    e.rootT = Math.max(0, e.rootT - edt);
+    if (e.type === 'pursuer') updatePursuer(e, edt, P);
+    else updateIdol(e, edt, P);
+    if (!e.active) return;
+    // knockback & separation
+    e.pos.addScaledVector(e.knock, edt);
+    e.knock.multiplyScalar(Math.exp(-7 * edt));
+    for (const o of E.list) {
+      if (o === e || !o.active || o.under) continue;
+      const dx = e.pos.x - o.pos.x, dz = e.pos.z - o.pos.z;
+      const d = Math.hypot(dx, dz), min = e.radius + o.radius + 0.1;
+      if (d < min && d > 1e-4) { const push = (min - d) * 0.5; e.pos.x += (dx / d) * push; e.pos.z += (dz / d) * push; }
+    }
+    // keep inside the courtyard
+    U.arenaClamp(e.pos, e.radius);
+    e.root.rotation.y = e.facing;
+  }
+
+  // hit flash, slow tint, the pallor of being pinned
+  function tint(e) {
+    const fl = e.flash * e.flash;
+    const sl = e.timeScale < 1 ? 1 : 0, pn = e.pinT > 0 ? 1 : 0;
+    const r = fl * 0.9 + sl * 0.03 + pn * 0.2, g = fl * 0.9 + sl * 0.035 + pn * 0.22, b = fl * 0.95 + sl * 0.06 + pn * 0.28;
+    for (const k in e.rig.mats) {
+      const m = e.rig.mats[k];
+      if (k === 'blade' || k === 'frag') continue; // these carry the amber wind-up glow
+      if (m.emissive && m.userData.rimStrength) m.emissive.setRGB(r, g, b);
+    }
+  }
+
+  function updateGlyph(e, dt) {
+    const g = e.rig.glyph;
+    if (e.mark > 0) e.mark = Math.max(0, e.mark - dt);
+    const show = e.mark > 0 && e.alive && !e.under;
+    g.visible = show;
+    if (!show) return;
+    g.quaternion.copy(U.world.camera.quaternion);
+    g.quaternion.premultiply(_q.copy(e.root.quaternion).invert());
+    g.rotateZ(e.animT * 0.7);
+    const a = Math.min(1, e.mark * 2.5);
+    g.scale.setScalar((0.88 + 0.12 * Math.sin(e.animT * 6)) * (0.5 + 0.5 * a));
+  }
 
   function updateBar(e) {
     const b = e.rig.bar;
@@ -565,11 +778,18 @@
         if (playerAlive) e.setState('approach');
         break;
       }
+      case 'dread': {
+        // it has seen what he is; it backs away, blades raised, and will not come
+        moveX = -dx / (dist || 1); moveZ = -dz / (dist || 1); speed = 1.8;
+        faceTo(e, pp.x, pp.z, 8, dt);
+        if (e.st >= e.dreadDur) e.setState('approach');
+        break;
+      }
     }
     if (!canMove) speed = 0;
     if (speed > 0) { e.pos.x += moveX * speed * dt; e.pos.z += moveZ * speed * dt; }
     e.vel.set(moveX * speed, 0, moveZ * speed);
-    animatePursuer(e, dt, speed);
+    animatePursuer(e, dt, e.state === 'dread' ? speed * 0.6 : speed);
   }
 
   function startWindup(e, n, P) {
@@ -636,6 +856,10 @@
       const w = Math.sin(k * Math.PI);
       lean = U.lerp(0.45, -0.35, w); headX = -0.6 * w;
       aR = [0.4, 0, -0.9 * w]; aL = [0.4, 0, 0.9 * w];
+    } else if (s === 'dread') {
+      const tr = Math.sin(t * 31) * 0.05;
+      lean = -0.18 + tr; headX = 0.25 + tr; twist = tr;
+      aR = [1.25, 0, -0.75 + tr]; eR = 1.3; aL = [1.25, 0, 0.75 - tr]; eL = 1.3;
     }
     if (e.flinch > 0) { lean -= e.flinch * 0.3; headX -= e.flinch * 0.3; }
     if (e.rootT > 0) { bodyY -= 0.05; twist += Math.sin(t * 22) * 0.06; }
@@ -743,9 +967,16 @@
         if (e.st >= (e.staggerDur || 0.5)) { e.setState('drift'); e.cool = 1.0; }
         break;
       }
+      case 'dread': {
+        mx = -dx / dist; mz = -dz / dist; speed = C.speed * 0.9;
+        faceTo(e, pp.x, pp.z, 3, dt);
+        if (e.st >= e.dreadDur) { e.setState('drift'); e.cool = Math.max(e.cool, 0.8); }
+        break;
+      }
     }
     if (!canMove) speed = 0;
     if (speed > 0) { e.pos.x += mx * speed * dt; e.pos.z += mz * speed * dt; }
+    e.vel.set(mx * speed, 0, mz * speed);
     animateIdol(e, dt);
   }
 
@@ -767,7 +998,8 @@
       const p = E.projectiles.find((x) => !x.active);
       if (!p) break;
       const yaw = e.lockYaw + i * C.fan;
-      p.active = true; p.life = 0;
+      p.active = true; p.life = 0; p.owner = e; p.held = false; p.reversed = false; p.heldField = null;
+      p.mesh.material = E.projMat; p.glow.material.color.setRGB(1.3, 0.5, 0.22);
       p.pos.set(e.pos.x + Math.sin(yaw) * 0.9, 1.25, e.pos.z + Math.cos(yaw) * 0.9);
       p.vel.set(Math.sin(yaw) * C.projSpeed, 0, Math.cos(yaw) * C.projSpeed);
       p.grp.rotation.set(0, yaw, 0);
@@ -807,7 +1039,8 @@
     else if (e.state === 'volleyMid') charge = 0.6 + 0.4 * U.clamp(e.st / C.volleyMid, 0, 1);
     else if (e.state === 'eruptWind') { charge = U.clamp(e.st / C.eruptWind, 0, 1); lift = charge * 0.5; spin = 4 * charge + 0.6; }
     else if (e.state === 'stagger') { r.float.rotation.z = Math.sin(t * 30) * 0.2 * (1 - U.clamp(e.st / (e.staggerDur || 0.5), 0, 1)); }
-    if (e.state !== 'stagger') r.float.rotation.z = U.damp(r.float.rotation.z, 0, 6, dt);
+    else if (e.state === 'dread') r.float.rotation.z = Math.sin(t * 37) * 0.07;
+    if (e.state !== 'stagger' && e.state !== 'dread') r.float.rotation.z = U.damp(r.float.rotation.z, 0, 6, dt);
     r.float.position.y = C.hover + Math.sin(t * 1.6) * 0.12 + lift - e.flinch * 0.15;
     r.core.rotation.y += dt * (0.4 + charge * 2);
     r.ring.rotation.z += dt * spin;
@@ -835,13 +1068,52 @@
   }
 
   // ---------------- projectiles ----------------
+  function killProj(p, n) {
+    FX.sparks(p.pos, n, { speed: 2, color: p.reversed ? undefined : FX.AMBER, life: 0.3, size: 0.08 });
+    p.active = false; p.grp.visible = false; p.held = false; p.reversed = false; p.heldField = null;
+  }
   function updateProjectiles(dt, P) {
+    if (dt <= 0) return;
+    const S = U.skills;
     for (const p of E.projectiles) {
       if (!p.active) continue;
+      if (p.held) {
+        // stopped dead inside the Missing Second, quivering
+        p.grp.children[0].rotation.z += dt * 1.5;
+        p.grp.position.y = 1.25 + Math.sin(p.life * 3 + p.pos.x) * 0.02;
+        if (!p.heldField || p.heldField.dead) E.reverseHeld(p.heldField);
+        continue;
+      }
       p.life += dt;
       p.pos.addScaledVector(p.vel, dt);
-      p.grp.children[0].rotation.z += dt * 12;
-      if (Math.random() < 0.6) FX.sparks(p.pos, 1, { speed: 0.4, color: FX.AMBER, life: 0.25, size: 0.1, grav: 0, a: 0.7 });
+      p.grp.children[0].rotation.z += dt * (p.reversed ? -16 : 12);
+      if (Math.random() < 0.6) FX.sparks(p.pos, 1, { speed: 0.4, color: p.reversed ? undefined : FX.AMBER, life: 0.25, size: 0.1, grav: 0, a: 0.7 });
+      if (S.tearSwallow && S.tearSwallow(p.pos)) { p.active = false; p.grp.visible = false; p.held = false; p.reversed = false; continue; }
+      if (p.reversed) {
+        // sent back along its own past: it finds the thing that made it
+        let hit = null;
+        for (const en of E.list) {
+          if (!en.alive || en.under) continue;
+          const r = en.radius + 0.35;
+          if (Math.hypot(en.pos.x - p.pos.x, en.pos.z - p.pos.z) < r) { hit = en; break; }
+        }
+        if (hit) {
+          E.hit(hit, 22, { dir: p.vel, knock: 3, stagger: 0.45 });
+          FX.sparks(p.pos, 12, { speed: 5, life: 0.35, size: 0.1 });
+          FX.ring({ pos: _tmp.copy(p.pos).setY(0), r0: 0.2, r1: 1.4, dur: 0.3, w0: 0.08, w1: 0.02, opacity: 0.7 });
+          U.audio.play('qhit', { gap: 0.04 });
+          killProj(p, 0); continue;
+        }
+        if (p.life > 2.6 || Math.hypot(p.pos.x, p.pos.z) > U.CONST.PLATFORM_R + 2) killProj(p, 5);
+        continue;
+      }
+      const f = S.fieldAt ? S.fieldAt(p.pos) : null;
+      if (f) {
+        p.held = true; p.heldField = f;
+        FX.sparks(p.pos, 6, { speed: 1.5, life: 0.3, size: 0.07, grav: 0 });
+        FX.ring({ pos: _tmp.copy(p.pos).setY(0.05), r0: 0.5, r1: 0.1, dur: 0.3, w0: 0.04, w1: 0.02, opacity: 0.5 });
+        continue;
+      }
       const dx = P.pos.x - p.pos.x, dz = P.pos.z - p.pos.z;
       if (P.alive && Math.hypot(dx, dz) < P.radius + 0.26) {
         if (P.takeDamage(IDOL.projDmg, p.pos)) {
@@ -850,15 +1122,13 @@
           continue;
         }
       }
-      if (p.life > 2.2 || Math.hypot(p.pos.x, p.pos.z) > U.CONST.PLATFORM_R + 2) {
-        FX.sparks(p.pos, 5, { speed: 2, color: FX.AMBER, life: 0.3, size: 0.08 });
-        p.active = false; p.grp.visible = false;
-      }
+      if (p.life > 2.2 || Math.hypot(p.pos.x, p.pos.z) > U.CONST.PLATFORM_R + 2) killProj(p, 5);
     }
   }
 
   function updateEruptions(dt, P) {
     const C = IDOL;
+    if (dt <= 0) return;
     for (const er of E.eruptions) {
       if (!er.active) continue;
       const ts = U.skills.timeScaleAt(er.pos);

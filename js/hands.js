@@ -25,7 +25,18 @@
   const THUMB = { pos: [0.066, 0.035, 0.012], lens: [0.062, 0.046, 0.036], r: 0.02 };
   const PALM_TOP = 0.17;
 
-  let template = null; // shared geometry + bone layout
+  // Wrong hands: more fingers than a hand should have, fanned across the knuckles.
+  function fingerSet(n) {
+    if (n === 4) return FINGERS;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const u = i / (n - 1);
+      const base = FINGERS[Math.min(3, Math.round(u * 3))];
+      out.push({ x: U.lerp(0.06, -0.06, u), lens: base.lens.map((l) => l * (0.9 + 0.3 * Math.sin(u * Math.PI))), r: base.r * 0.82, spread: U.lerp(-0.24, 0.26, u) });
+    }
+    return out;
+  }
+  const templates = {}; // shared geometry + bone layout, per finger count
 
   function palmGeom() {
     // faceted palm: narrower at the wrist, wide at the knuckles, slightly domed on the back
@@ -51,7 +62,8 @@
     return U.taperGeom(len, r0, r1, 4, 1.0, 0.8, false);
   }
 
-  function buildTemplate() {
+  function buildTemplate(nFingers) {
+    const FINGERS = fingerSet(nFingers);
     const bones = [];
     const parts = []; // {geo, bone}
     const root = new T.Bone(); bones.push(root);
@@ -117,7 +129,7 @@
     const thumbIdx = thumb.map((b) => bones.indexOf(b));
     // bone hierarchy description to rebuild per instance
     const layout = bones.map((b) => ({ parent: b.parent && b.parent.isBone ? bones.indexOf(b.parent) : -1, pos: b.position.clone(), rot: b.rotation.clone() }));
-    return { geo, rest, fingerIdx, thumbIdx, layout };
+    return { geo, rest, fingerIdx, thumbIdx, layout, fingers: FINGERS };
   }
 
   const HAND_VS = `
@@ -167,7 +179,9 @@
   U.SpectralHand = class {
     constructor(scene, opts) {
       opts = opts || {};
-      if (!template) template = buildTemplate();
+      const nf = opts.fingers || 4;
+      const template = templates[nf] || (templates[nf] = buildTemplate(nf));
+      this.tpl = template;
       this.group = new T.Group();
       this.mat = U.handMaterial(opts);
       const bones = template.layout.map((l) => { const b = new T.Bone(); b.position.copy(l.pos); b.rotation.copy(l.rot); return b; });
@@ -190,6 +204,7 @@
       this.poseSpeed = 10;
       this.scale = 1;
       this.opacity = 1;
+      this.wrongPh = Math.random() * 6;
       this.active = false;
     }
     setPose(name, speed) {
@@ -219,11 +234,12 @@
       for (let i = 0; i < 4; i++) c.c[i] += (t.c[i] - c.c[i]) * k;
       c.th += (t.th - c.th) * k;
       c.sp += (t.sp - c.sp) * k;
-      const B = this.bones, rest = template.rest;
+      const template = this.tpl;
+      const B = this.bones, rest = template.rest, nF = template.fingerIdx.length;
       template.fingerIdx.forEach((chain, fi) => {
-        const curl = c.c[fi];
+        const curl = c.c[nF === 4 ? fi : Math.min(3, Math.round((fi / (nF - 1)) * 3))] + (nF === 4 ? 0 : Math.sin(fi * 2.3 + this.wrongPh) * 0.12);
         const b0 = B[chain[0]], b1 = B[chain[1]], b2 = B[chain[2]];
-        b0.rotation.set(rest[chain[0]].x + curl * 1.2, 0, FINGERS[fi].spread * c.sp);
+        b0.rotation.set(rest[chain[0]].x + curl * 1.2, 0, template.fingers[fi].spread * c.sp);
         b1.rotation.x = curl * 1.5;
         b2.rotation.x = curl * 1.15;
       });

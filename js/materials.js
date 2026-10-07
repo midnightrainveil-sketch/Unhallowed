@@ -127,6 +127,7 @@
     U.tex.tabard = buildTabardTexture();
     U.tex.coatBack = buildCoatTexture();
     U.tex.cracks = buildCrackTexture();
+    U.tex.glyph = buildGlyphTexture();
     U.tex.envMap = null; // set by world after renderer exists
   };
 
@@ -241,6 +242,17 @@
     const t = new T.CanvasTexture(c);
     t.colorSpace = T.SRGBColorSpace;
     return t;
+  }
+
+  // the "unwritten" mark Vaust leaves on things: ring, axis, crescent, diamond
+  function buildGlyphTexture() {
+    const S = 128, c = canvas(S), ctx = c.getContext('2d');
+    ctx.strokeStyle = '#fff'; ctx.lineCap = 'round';
+    ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(64, 64, 44, 0.25, Math.PI * 2 - 0.25); ctx.stroke();
+    ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(64, 8); ctx.lineTo(64, 120); ctx.stroke();
+    ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(64, 70, 22, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+    ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(64, 30); ctx.lineTo(74, 44); ctx.lineTo(64, 58); ctx.lineTo(54, 44); ctx.closePath(); ctx.stroke();
+    return new T.CanvasTexture(c);
   }
 
   function buildCrackTexture() {

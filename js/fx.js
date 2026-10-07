@@ -85,7 +85,7 @@
         varying float vA; varying vec3 vC;
         void main(){ float d = length(gl_PointCoord - 0.5) * 2.0; float a = (1.0 - smoothstep(0.0, 1.0, d)); a *= a; if (vA * a < 0.003) discard; gl_FragColor = vec4(vC, vA * a); }` : `
         varying float vA; varying vec3 vC;
-        void main(){ float d = length(gl_PointCoord - 0.5) * 2.0; float a = smoothstep(1.0, 0.0, d); a = a * a * (0.6 + 0.4 * step(d, 0.25)); if (vA * a < 0.003) discard; gl_FragColor = vec4(vC, vA * a); }`,
+        void main(){ float d = length(gl_PointCoord - 0.5) * 2.0; float a = (1.0 - smoothstep(0.0, 1.0, d)); a = a * a * (0.6 + 0.4 * step(d, 0.25)); if (vA * a < 0.003) discard; gl_FragColor = vec4(vC, vA * a); }`,
       transparent: true, depthWrite: false, blending: additive ? T.AdditiveBlending : T.NormalBlending,
     });
     const pts = new T.Points(geo, mat);
@@ -462,6 +462,107 @@
     return t;
   };
 
+  // ---------------- Generic ghosts (any object: enemy echoes, predictions, burned silhouettes) ----------------
+  const GHOST_SLOTS = 40;
+  function makeGhost() {
+    const spectral = U.spectralMaterial({ opacity: 0.5, core: 0.3, edge: 1.0, glow: 1.2 });
+    const burn = new T.MeshBasicMaterial({ color: 0x030304, transparent: true, opacity: 0.9, depthWrite: false });
+    const grp = new T.Group();
+    grp.visible = false;
+    const meshes = [];
+    for (let i = 0; i < GHOST_SLOTS; i++) {
+      const m = new T.Mesh(undefined, spectral);
+      m.matrixAutoUpdate = false; m.frustumCulled = false; m.visible = false; m.renderOrder = 4;
+      grp.add(m); meshes.push(m);
+    }
+    FX.scene.add(grp);
+    return { grp, meshes, spectral, burn, active: false, t: 0, o: null, release() { this.active = false; this.grp.visible = false; } };
+  }
+  const _gm = new T.Matrix4();
+  // Snapshot every visible mesh under `root` into a ghost. o: {offset (V3, world), opacity, dur, hold, mode: 'spectral'|'burn', fadeIn}
+  FX.ghostOf = function (root, o) {
+    o = o || {};
+    const g = FX.ghostPool.get();
+    g.active = true; g.t = 0; g.o = o;
+    root.updateMatrixWorld(true);
+    _gm.makeTranslation(o.offset ? o.offset.x : 0, o.offset ? o.offset.y : 0, o.offset ? o.offset.z : 0);
+    const mat = o.mode === 'burn' ? g.burn : g.spectral;
+    let i = 0;
+    root.traverseVisible((src) => {
+      if (!src.isMesh || src.isInstancedMesh || i >= GHOST_SLOTS || src.userData.noGhost || src.renderOrder >= 20) return;
+      const m = g.meshes[i++];
+      m.geometry = src.geometry; m.material = mat; m.visible = true;
+      m.matrix.multiplyMatrices(_gm, src.matrixWorld); m.matrixWorld.copy(m.matrix);
+    });
+    for (; i < GHOST_SLOTS; i++) g.meshes[i].visible = false;
+    g.grp.visible = true;
+    updateGhost(g, 0);
+    return g;
+  };
+  function updateGhost(g, dt) {
+    g.t += dt;
+    const o = g.o, dur = o.dur || 0.4, hold = o.hold || 0, peak = o.opacity != null ? o.opacity : 0.5;
+    const fadeIn = o.fadeIn ? U.clamp(g.t / o.fadeIn, 0, 1) : 1;
+    const k = g.t < hold ? 0 : U.clamp((g.t - hold) / dur, 0, 1);
+    const a = peak * fadeIn * (1 - k) * (1 - k);
+    if (o.mode === 'burn') g.burn.opacity = a; else g.spectral.uniforms.uOpacity.value = a;
+    if (g.t >= hold + dur) g.release();
+  }
+
+  // ---------------- Reality damage: the floor stays wrong for a while ----------------
+  const _wp = new V3(), _wv = new V3();
+  FX.wrong = function (pos, radius, dur, strength) {
+    const k = strength || 1;
+    FX.crack(pos, radius * 1.6, dur, 0.28 * k);
+    // slabs and grit lift off the floor and hang there, slowly turning
+    for (let i = 0; i < Math.round(8 * k); i++) {
+      const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * radius;
+      _wp.set(pos.x + Math.cos(a) * r, 0.1, pos.z + Math.sin(a) * r);
+      FX.shards(_wp, 1, { speed: 0.6, up: 6, size: 0.12 + Math.random() * 0.18, life: dur, grav: -0.25, drag: 1.2, spread: 0.1, floor: false, colors: [_slabA, _slabB] });
+    }
+    // mist that runs backwards: it falls and gathers instead of rising
+    for (let i = 0; i < Math.round(5 * k); i++) {
+      const a = Math.random() * Math.PI * 2, r = radius * (0.7 + Math.random() * 0.5);
+      _wp.set(pos.x + Math.cos(a) * r, 1.4 + Math.random(), pos.z + Math.sin(a) * r);
+      _wv.set(-Math.cos(a) * 0.9, -0.5, -Math.sin(a) * 0.9);
+      FX.mist(_wp, 1, { spread: 0.1, rise: 0.01, out: 0.01, vel: _wv, life: Math.min(2.2, dur), size: 1.0, grow: 0.6, a: 0.16, drag: 0.4 });
+    }
+  };
+  const _slabA = new T.Color(0.16, 0.16, 0.18), _slabB = new T.Color(0.26, 0.26, 0.29);
+
+  // ---------------- Space-fold seam: a hairline where space was folded shut ----------------
+  const SEAM_FS = `
+#define sq(x) ((x)*(x))
+    uniform float uOpacity; varying vec2 vUv;
+    void main(){
+      float v = abs(vUv.y - 0.5) * 2.0;
+      float edge = exp(-sq((v - 0.55) / 0.18));
+      float core = 1.0 - smoothstep(0.35, 0.5, v);
+      float ends = smoothstep(0.0, 0.08, vUv.x) * (1.0 - smoothstep(0.92, 1.0, vUv.x));
+      float a = clamp(edge + core * 0.9, 0.0, 1.0) * ends * uOpacity;
+      if (a < 0.004) discard;
+      gl_FragColor = vec4(vec3(2.6, 2.65, 2.9) * edge, a);
+    }`;
+  function makeSeam() {
+    const mat = new T.ShaderMaterial({ uniforms: { uOpacity: { value: 0 } }, vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`, fragmentShader: SEAM_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
+    const geo = new T.PlaneGeometry(1, 1); geo.translate(0.5, 0, 0); geo.rotateX(-Math.PI / 2);
+    const m = new T.Mesh(geo, mat);
+    m.visible = false; m.renderOrder = 8;
+    FX.scene.add(m);
+    return { mesh: m, mat, active: false, t: 0, dur: 0.2, release() { this.active = false; this.mesh.visible = false; } };
+  }
+  // flat seam on the ground from a to b
+  FX.seam = function (a, b, width, dur) {
+    const sm = FX.seams.get();
+    sm.active = true; sm.t = 0; sm.dur = dur || 0.2;
+    const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz);
+    sm.mesh.position.set(a.x, 0.09, a.z);
+    sm.mesh.rotation.set(0, Math.atan2(-dz, dx), 0);
+    sm.mesh.scale.set(len, 1, width || 0.12);
+    sm.mesh.visible = true;
+    return sm;
+  };
+
   // ---------------- Init / update / reset ----------------
   FX.init = function (scene) {
     FX.scene = scene;
@@ -491,6 +592,8 @@
     }, 10);
     FX.crescents = new U.Pool(makeCrescent, 6);
     FX.teles = new U.Pool(makeTelegraph, 24);
+    FX.ghostPool = new U.Pool(makeGhost, 12);
+    FX.seams = new U.Pool(makeSeam, 6);
   };
 
   FX.update = function (dt) {
@@ -527,6 +630,13 @@
         if (c.fade <= 0) c.release();
       }
     });
+    FX.ghostPool.forEachActive((g) => updateGhost(g, dt));
+    FX.seams.forEachActive((sm) => {
+      sm.t += dt;
+      const k = sm.t / sm.dur;
+      sm.mat.uniforms.uOpacity.value = k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85;
+      if (k >= 1) sm.release();
+    });
     if (FX.ghosts) for (const g of FX.ghosts) {
       if (!g.active) continue;
       g.t += dt;
@@ -546,5 +656,7 @@
     FX.crescents.forEachActive((c) => c.release());
     FX.teles.forEachActive((t) => t.release());
     if (FX.ghosts) for (const g of FX.ghosts) { g.active = false; g.grp.visible = false; }
+    FX.ghostPool.forEachActive((g) => g.release());
+    FX.seams.forEachActive((sm) => sm.release());
   };
 })(window.U);

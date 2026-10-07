@@ -101,17 +101,19 @@
       uAspect: { value: 1.7 },
       uHurt: { value: 0 },
       uFlash: { value: 0 },
+      uNeg: { value: 0 },
+      uStrain: { value: 0 },
     },
     vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: `
-      uniform sampler2D tDiffuse; uniform float uTime, uVignette, uDim, uDesat, uGrain, uAspect, uHurt, uFlash;
+      uniform sampler2D tDiffuse; uniform float uTime, uVignette, uDim, uDesat, uGrain, uAspect, uHurt, uFlash, uNeg, uStrain;
       varying vec2 vUv;
       float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
       void main(){
         vec4 c = texture2D(tDiffuse, vUv);
         vec3 col = c.rgb;
         float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
-        col = mix(col, vec3(l), uDesat);
+        col = mix(col, vec3(l), min(1.0, uDesat + uStrain * 0.18));
         col *= mix(vec3(0.93, 0.95, 1.05), vec3(1.0), smoothstep(0.0, 0.35, l));
         vec2 d = (vUv - 0.5) * vec2(uAspect, 1.0);
         float r = length(d) / (0.5 * length(vec2(uAspect, 1.0)));
@@ -120,6 +122,11 @@
         col *= 1.0 - uDim * (0.35 + 0.55 * vig);
         col = mix(col, col * vec3(1.25, 0.55, 0.5), uHurt * vig);
         col += uFlash * (1.0 - vig) * 0.25;
+        // strain: the edges of the world go dark when he uses too much of himself
+        col *= 1.0 - smoothstep(0.25, 1.0, r) * uStrain * 0.55;
+        // the seal objects: a photographic negative of the world
+        vec3 neg = max(vec3(0.0), vec3(0.62, 0.64, 0.7) - min(col, vec3(1.5)) * 0.55);
+        col = mix(col, neg, uNeg);
         col += (hash(vUv * 1000.0 + fract(uTime) * 61.0) - 0.5) * uGrain * (0.25 + l);
         gl_FragColor = vec4(max(col, 0.0), c.a);
       }`,
@@ -224,11 +231,11 @@
   function buildEclipse() {
     const R = 36, S = 3.4;
     const mat = new T.ShaderMaterial({
-      uniforms: { uTime: U.shared.uTime, uDim: { value: 0 } },
+      uniforms: { uTime: U.shared.uTime, uDim: { value: 0 }, uEye: { value: 0 } },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: `
 #define sq(x) ((x)*(x))
-        uniform float uTime, uDim; varying vec2 vUv;
+        uniform float uTime, uDim, uEye; varying vec2 vUv;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
         float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
@@ -249,8 +256,21 @@
           float fade = 1.0 - smoothstep(${(S * 0.82).toFixed(2)}, ${S.toFixed(2)}, d);
           vec3 light = vec3(0.86, 0.88, 0.96) * glow + vec3(1.0, 1.0, 1.05) * ring + vec3(0.92, 0.94, 1.0) * (a1 * 2.4 + a2 * 1.7 + a3 * 1.3 + spokes * 0.9);
           light *= fade * (1.0 - uDim * 0.5);
-          float disc = smoothstep(1.0, 0.985, d);
+          float disc = (1.0 - smoothstep(0.985, 1.0, d));
           vec3 discCol = vec3(0.006, 0.006, 0.008) + n * 0.012;
+          // when the seal objects, the eclipse opens an eye and looks down at the courtyard
+          if (uEye > 0.001) {
+            vec2 e = vec2(p.x, p.y + 0.04);
+            float lid = max(0.0, 1.0 - sq(e.x / 0.8)) * 0.4 * uEye;
+            float open = (1.0 - smoothstep(lid - 0.025, lid, abs(e.y))) * step(0.001, lid);
+            vec2 ip = e - vec2(0.03 * sin(uTime * 0.7), -0.06);
+            float ir = length(ip);
+            float iris = (1.0 - smoothstep(0.28, 0.3, ir));
+            float pupil = (1.0 - smoothstep(0.03, 0.045, abs(ip.x))) * (1.0 - smoothstep(0.2, 0.26, ir));
+            vec3 eyeCol = mix(vec3(0.16, 0.16, 0.18), vec3(1.5, 1.42, 1.15) * (0.7 + 0.3 * n), iris);
+            eyeCol = mix(eyeCol, vec3(0.0), pupil);
+            discCol = mix(discCol, eyeCol, open);
+          }
           // premultiplied: the disc occludes, everything else adds light
           gl_FragColor = vec4(mix(light, discCol, disc), clamp(disc + glow * 0.18 * fade, 0.0, 1.0));
         }`,
@@ -725,7 +745,7 @@
         }`,
       fragmentShader: `
         varying float vA;
-        void main(){ float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.0, d); gl_FragColor = vec4(vec3(1.6), a * vA * 0.8); }`,
+        void main(){ float d = length(gl_PointCoord - 0.5); float a = (1.0 - smoothstep(0.0, 0.5, d)); gl_FragColor = vec4(vec3(1.6), a * vA * 0.8); }`,
       transparent: true, depthWrite: false, blending: T.AdditiveBlending,
     });
     const pts = new T.Points(geo, mat);
@@ -819,12 +839,15 @@
     W.eclipse.material.uniforms.uDim.value = W.dim;
     W.grade.uniforms.uDim.value = W.dim * 0.7;
     W.seal.material.opacity = 0.2 + W.sealPulse * 0.6;
+    W.eclipse.material.uniforms.uEye.value = W.eye;
+    W.grade.uniforms.uNeg.value = W.neg;
+    W.grade.uniforms.uStrain.value = W.strain;
     W.sealPulse = Math.max(0, W.sealPulse - dt * 1.2);
     // view-space key direction for rim shading (camera orientation is fixed, but cheap to recompute)
     _v.copy(W.keyDir).transformDirection(W.camera.matrixWorldInverse);
     U.shared.uRimDir.value.copy(_v);
   };
-  W.sealPulse = 0;
+  W.sealPulse = 0; W.eye = 0; W.neg = 0; W.strain = 0;
 
   W.render = function (rt) {
     W.grade.uniforms.uTime.value = rt;

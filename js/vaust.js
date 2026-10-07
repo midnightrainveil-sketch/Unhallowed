@@ -531,7 +531,7 @@
       this.turnRate = 0;
       this.hurtT = 0;
       this.deadT = -1;
-      this.handsAlpha = 1;
+      this.handsAlpha = 1; this.tension = 0;
       this.poseR = { h: new V3(), b: new V3(), e: new V3() };
       this.poseL = new V3();
       this._tmpPose = { h: new V3(), b: new V3(), e: new V3() };
@@ -648,6 +648,7 @@
         if (g.twist) twist = U.lerp(twist, g.twist, w);
         if (g.headX) headX += g.headX * w;
         if (g.crouch) bodyY -= g.crouch * w;
+        if (g.lean) leanX += g.lean * w;
         if (g.kind === 'Q') twist = U.lerp(twist, 0.35, w);
       }
 
@@ -770,6 +771,14 @@
           }
           break;
         }
+        case 'Kneel': {
+          // pressed down by what he just did: one knee, sword-point to the stone
+          Lh.lerp(tmp.set(0.3, 0.62, 0.3), w);
+          R.h.lerp(tmp.set(-0.3, 0.7, 0.42), w);
+          R.b.lerp(tmp.set(0, -1, 0.2).normalize(), w).normalize();
+          R.e.lerp(tmp.set(1, 0, 0), w).normalize();
+          break;
+        }
         case 'Y': {
           Lh.lerp(tmp.set(0.5, 1.08, 0.12), w);
           R.h.lerp(tmp.set(-0.5, 1.06, 0.1), w);
@@ -784,6 +793,8 @@
       const t = this.time;
       const dead = st.dead >= 0;
       this.handsAlpha = U.damp(this.handsAlpha, dead ? 0 : 1, dead ? 2 : 6, dt);
+      this.tension = Math.max(0, this.tension - dt * 0.45);
+      const ten = this.tension;
       const facing = st.facing;
       _qf.setFromAxisAngle(_up, facing);
       const chestW = this.chest.getWorldPosition(_cw);
@@ -843,13 +854,13 @@
         _s1.set((i % 2 ? 0.16 : -0.16), 0.18, -0.12).applyQuaternion(_qf).add(chestW);
         for (let k = 0; k < n; k++) {
           const u = k / (n - 1);
-          const sag = Math.sin(u * Math.PI) * (0.18 + Math.sin(t * 2 + h.ph + u * 4) * 0.05);
-          pos[k * 3] = U.lerp(_s0.x, _s1.x, u) + Math.sin(t * 3 + u * 9 + h.ph) * 0.02;
+          const sag = Math.sin(u * Math.PI) * (0.18 + Math.sin(t * 2 + h.ph + u * 4) * 0.05) * (1 - ten * 0.92);
+          pos[k * 3] = U.lerp(_s0.x, _s1.x, u) + Math.sin(t * (3 + ten * 60) + u * 9 + h.ph) * (0.02 + ten * 0.012);
           pos[k * 3 + 1] = U.lerp(_s0.y, _s1.y, u) - sag;
           pos[k * 3 + 2] = U.lerp(_s0.z, _s1.z, u);
         }
         h.strand.geometry.attributes.position.needsUpdate = true;
-        h.strand.material.opacity = 0.2 * this.handsAlpha * (h.scale > 1.6 ? 0.3 : 1) * (h.fade != null ? h.fade : 1);
+        h.strand.material.opacity = (0.2 + ten * 0.6) * this.handsAlpha * (h.scale > 1.6 && ten < 0.3 ? 0.3 : 1) * (h.fade != null ? h.fade : 1);
       });
     }
 
@@ -865,7 +876,7 @@
     }
 
     reset(pos, facing) {
-      this.phase = 0; this.runBlend = 0; this.hipYaw = 0; this.guard = 0; this.deadT = -1; this.handsAlpha = 1;
+      this.phase = 0; this.runBlend = 0; this.hipYaw = 0; this.guard = 0; this.deadT = -1; this.handsAlpha = 1; this.tension = 0;
       this.turnRate = 0;
       for (const p of this.panels) { p.s.set(0, 0); p.v.set(0, 0); }
       for (const h of this.hair) { h.ax = h.az = h.vx = h.vz = h.cx = h.cz = h.cvx = h.cvz = 0; }

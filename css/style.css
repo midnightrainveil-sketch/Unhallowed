@@ -306,6 +306,12 @@ button { font: inherit; color: inherit; }
 .skill.ready { border-color: rgba(236,238,244,0.75); }
 .skill.ready svg { filter: drop-shadow(0 0 4px rgba(255,255,255,0.55)); }
 .skill.cooling svg { opacity: 0.45; }
+.skill.flicker { animation: skillFlicker var(--flicker, 1.5s) steps(1, end) both; }
+@keyframes skillFlicker {
+  0% { opacity: 0.15; } 7% { opacity: 1; } 12% { opacity: 0.3; } 19% { opacity: 0.85; } 23% { opacity: 0.1; }
+  31% { opacity: 0.7; } 38% { opacity: 0.25; } 47% { opacity: 1; } 55% { opacity: 0.45; } 63% { opacity: 0.95; }
+  74% { opacity: 0.6; } 86% { opacity: 1; } 100% { opacity: 1; }
+}
 .skill.flash::after { content: ''; position: absolute; inset: 0; animation: skillFlash .5s ease-out both; }
 @keyframes skillFlash { from { background: rgba(255,255,255,0.55); } to { background: rgba(255,255,255,0); } }
 .skill.aiming { border-color: #fff; box-shadow: 0 0 16px rgba(255,255,255,0.35); }

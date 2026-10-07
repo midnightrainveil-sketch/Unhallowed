@@ -159,6 +159,54 @@
       ping(660, 0.1, 1.4, 0.0);
       ping(990, 0.07, 1.2, 0.05);
     },
+    // the fold: space snapping shut between the blade and something far away
+    fold() {
+      tone({ type: 'sine', f0: 2400, f1: 300, attack: 0.002, dur: 0.12, gain: 0.05 });
+      noise({ type: 'bandpass', f0: 5200, f1: 900, q: 4, attack: 0.002, dur: 0.1, gain: 0.14 });
+      tone({ type: 'sine', f0: 90, f1: 140, attack: 0.002, dur: 0.08, gain: 0.12 });
+    },
+    // pinned in time / snapping back into place
+    pin() {
+      tone({ type: 'triangle', f0: 1900, f1: 2100, attack: 0.002, dur: 0.06, gain: 0.05 });
+      noise({ type: 'highpass', f0: 6000, q: 0.7, dur: 0.04, gain: 0.12 });
+    },
+    tick() {
+      noise({ type: 'bandpass', f0: 2600, q: 9, dur: 0.035, gain: 0.14 });
+      tone({ type: 'sine', f0: 180, f1: 90, attack: 0.002, dur: 0.12, gain: 0.08 });
+    },
+    // The Missing Second: a pitched-down drone for the life of the field
+    tDrone() {
+      tone({ type: 'sawtooth', f0: 98, f1: 49, attack: 0.3, hold: 3.2, dur: 0.6, sweep: 4, gain: 0.05, lp: 420, lpq: 2 });
+      tone({ type: 'sine', f0: 196, f1: 92, attack: 0.3, hold: 3.2, dur: 0.6, sweep: 4, gain: 0.05, detune: -12 });
+      noise({ type: 'bandpass', f0: 900, f1: 220, q: 5, attack: 0.5, hold: 2.8, dur: 0.8, sweep: 4, gain: 0.06, rate: 0.5 });
+    },
+    // reversed swell: the collapse plays time backwards
+    rewind() {
+      noise({ type: 'bandpass', f0: 300, f1: 4800, q: 2, attack: 0.38, dur: 0.04, gain: 0.3 });
+      tone({ type: 'sine', f0: 60, f1: 420, attack: 0.36, dur: 0.06, gain: 0.16 });
+      ping(1600, 0.06, 0.5, 0.4);
+    },
+    swallow() {
+      noise({ type: 'lowpass', f0: 2400, f1: 90, q: 3, attack: 0.002, dur: 0.2, gain: 0.22 });
+      tone({ type: 'sine', f0: 600, f1: 60, attack: 0.002, dur: 0.18, gain: 0.08 });
+    },
+    // a wound in the air that stays open
+    tear() {
+      noise({ type: 'bandpass', f0: 140, f1: 60, q: 6, attack: 0.1, hold: 0.4, dur: 2.2, gain: 0.3, rate: 0.3 });
+      tone({ type: 'sine', f0: 41, f1: 38, attack: 0.2, hold: 1.4, dur: 1.4, gain: 0.25 });
+      tone({ type: 'sine', f0: 1244, f1: 1230, attack: 0.6, hold: 0.8, dur: 1.2, gain: 0.018, detune: 9 });
+    },
+    // the seal objects: everything inverts; then silence where things were
+    negative() {
+      tone({ type: 'sine', f0: 3520, f1: 3400, attack: 0.002, hold: 0.8, dur: 0.2, gain: 0.03 });
+      tone({ type: 'sine', f0: 3527, f1: 3410, attack: 0.002, hold: 0.8, dur: 0.2, gain: 0.03 });
+      tone({ type: 'sine', f0: 35, f1: 30, attack: 0.05, hold: 0.7, dur: 0.3, gain: 0.35 });
+    },
+    erase() {
+      noise({ type: 'highpass', f0: 7000, q: 0.7, attack: 0.002, dur: 0.6, gain: 0.12, delay: 0.05 });
+      ping(220, 0.08, 2.4, 0.15);
+      tone({ type: 'sine', f0: 110, f1: 104, attack: 0.3, hold: 0.6, dur: 1.6, gain: 0.08, delay: 0.1 });
+    },
     hurt() {
       noise({ type: 'lowpass', f0: 1400, f1: 200, q: 1, dur: 0.18, gain: 0.45 });
       tone({ type: 'square', f0: 140, f1: 70, dur: 0.16, gain: 0.08, lp: 700 });
@@ -251,7 +299,32 @@
       o.connect(og); og.connect(out); o.start(); drones.push(o);
     });
     src.start(); lfo.start(); lfo2.start();
-    A.ambient = { out, src, lfo, lfo2, drones };
+    // whispering, held at zero until he strains himself (S.strain)
+    const wg = c.createGain(); wg.gain.value = 0; wg.connect(A.master);
+    const ws = c.createBufferSource(); ws.buffer = A.noiseBuf; ws.loop = true; ws.playbackRate.value = 0.9;
+    const wl = [];
+    [[700, 0.31], [1250, 0.43], [2300, 0.57]].forEach(([fr, rate]) => {
+      const bf = c.createBiquadFilter(); bf.type = 'bandpass'; bf.frequency.value = fr; bf.Q.value = 9;
+      const lf = c.createOscillator(); lf.frequency.value = rate; const lg = c.createGain(); lg.gain.value = fr * 0.35;
+      lf.connect(lg); lg.connect(bf.frequency); lf.start(); wl.push(lf);
+      ws.connect(bf); bf.connect(wg);
+    });
+    // syllable-like chopping
+    const am = c.createGain(); am.gain.value = 0; wg.disconnect(); wg.connect(am); am.connect(A.master);
+    const ch = c.createOscillator(); ch.type = 'square'; ch.frequency.value = 5.3; const chg = c.createGain(); chg.gain.value = 0.5;
+    const ch2 = c.createOscillator(); ch2.frequency.value = 1.7; const ch2g = c.createGain(); ch2g.gain.value = 0.35;
+    ch.connect(chg); chg.connect(am.gain); ch2.connect(ch2g); ch2g.connect(am.gain); ch.start(); ch2.start(); wl.push(ch, ch2);
+    am.gain.value = 0.5;
+    ws.start();
+    A.ambient = { out, src, lfo, lfo2, drones, whisper: wg, wl };
+  };
+
+  A.setStrain = function (s) {
+    if (!A.ambient || !A.ambient.whisper) return;
+    const v = Math.max(0, s - 0.25) * 0.5;
+    if (Math.abs(v - (A._strainV || 0)) < 0.01) return;
+    A._strainV = v;
+    A.ambient.whisper.gain.setTargetAtTime(v, A.ctx.currentTime, 0.4);
   };
 
   A.setAmbient = function (level) {

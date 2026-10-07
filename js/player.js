@@ -13,6 +13,7 @@
     dodgeDist: 5.0, dodgeDur: 0.28, dodgeIframe: 0.2, dodgeRecharge: 3.0, maxCharges: 3,
     hurtProtect: 0.6,
     s1Dmg: 16, s1Range: 2.2, s2Dmg: 25, s2Range: 2.4, handDmg: 10,
+    foldRange: 14, foldCone: 0.45, foldMin: 0.4, echoDelay: 0.5, echoMult: 0.5,
     comboReset: 0.45,
   };
 
@@ -38,6 +39,8 @@
     P.protect = 0; P.hurt = 0;
     P.attack = null; P.combo = 0; P.comboTimer = 0; P.queued = false;
     P.gesture = null;
+    for (const ec of echoes) if (ec.cres) FX.crescentRelease(ec.cres);
+    echoes.length = 0;
     P.aiming = null; // E/T held for preview
     P.buffer = null; // buffered skill during dodge
     P.upgrades.widen = 0; P.upgrades.hands = 0; P.upgrades.absence = 0;
@@ -51,6 +54,7 @@
   P.invulnerable = function () { return (P.dodge && P.dodge.t < P.TUNE.dodgeIframe) || P.protect > 0; };
 
   P.setGesture = function (g) { g.t = 0; P.gesture = g; };
+  const HEAVY_G = { R: true, Y: true, Kneel: true }; // gestures that hold him in place / block attacks
 
   const _mv = new V3(), _aimDir = new V3(), _tmp = new V3(), _tmp2 = new V3();
 
@@ -125,7 +129,7 @@
         const p = P.attack.t / S.dur;
         speedMul = p < S.b ? 0.5 : 0.72;
       }
-      if (P.gesture && (P.gesture.kind === 'R' || P.gesture.kind === 'Y') && P.gesture.t < P.gesture.holdT) speedMul = Math.min(speedMul, 0.6);
+      if (P.gesture && HEAVY_G[P.gesture.kind] && P.gesture.t < P.gesture.holdT) speedMul = Math.min(speedMul, P.gesture.kind === 'Kneel' ? 0.08 : 0.6);
       const sp = Tn.speed * speedMul;
       _mv.set(ix * sp, 0, iz * sp);
       const k = 1 - Math.exp(-22 * dt);
@@ -147,7 +151,7 @@
     }
 
     if (P.buffer) {
-      const heavyHold = P.gesture && (P.gesture.kind === 'R' || P.gesture.kind === 'Y') && P.gesture.t < P.gesture.holdT;
+      const heavyHold = P.gesture && HEAVY_G[P.gesture.kind] && P.gesture.t < P.gesture.holdT;
       if (!P.dodge && !heavyHold) { const b = P.buffer; P.buffer = null; castSkill(b.key); }
       else { P.buffer.t -= dt; if (P.buffer.t <= 0) P.buffer = null; }
     }
@@ -157,7 +161,7 @@
 
     // ---- basic attack ----
     P.comboTimer += dt;
-    const busy = P.gesture && (P.gesture.kind === 'R' || P.gesture.kind === 'Y') && P.gesture.t < P.gesture.holdT;
+    const busy = P.gesture && HEAVY_G[P.gesture.kind] && P.gesture.t < P.gesture.holdT;
     if ((P.dodge || busy) && IN.mouse.pressed) P.queued = true; // a click during a dodge attacks right after it
     if (!P.dodge && !busy) {
       const want = IN.mouse.down || IN.mouse.pressed;
@@ -171,6 +175,7 @@
       }
     }
     updateAttack(dt);
+    updateEchoes(dt);
 
     if (P.gesture) { P.gesture.t += dt; if (P.gesture.t > (P.gesture.outT || 0.6)) P.gesture = null; }
     animate(dt);
@@ -235,7 +240,7 @@
     if (!P.alive || !S.ready(key)) return;
     if (P.dodge) { P.buffer = { key, t: 0.3 }; return; }
     const heavy = key === 'R' || key === 'Y';
-    if (P.gesture && (P.gesture.kind === 'R' || P.gesture.kind === 'Y') && P.gesture.t < P.gesture.holdT) { P.buffer = { key, t: P.gesture.holdT - P.gesture.t + 0.2 }; return; }
+    if (P.gesture && HEAVY_G[P.gesture.kind] && P.gesture.t < P.gesture.holdT) { P.buffer = { key, t: P.gesture.holdT - P.gesture.t + 0.2 }; return; }
     if (heavy && P.attack) { FX.crescentRelease(P.attack.cres); P.attack = null; }
     // face the cursor immediately for directional casts
     P.facing = Math.atan2(P.aim.x - P.pos.x, P.aim.z - P.pos.z);
@@ -272,7 +277,9 @@
       P.rig.root.updateMatrixWorld(true);
       a.cres = FX.crescent(S, P.rig.body.matrixWorld, heavy ? { inner: 0.25, outer: 1.78, bright: 1.25, fadeTime: 0.2 } : { inner: 0.45, outer: 1.6, bright: 1.0, fadeTime: 0.14 });
       a.swingYaw = P.facing;
+      a.bodyM = P.rig.body.matrixWorld.clone();
       U.audio.play(heavy ? 'swing2' : 'swing1');
+      a.fold = startFold(S, a.bodyM, a.swingYaw, heavy, 1);
       if (heavy) {
         // spectral hand strike accompanies the reverse slash
         const d = U.dirFromAngle(P.facing, new V3());
@@ -286,13 +293,17 @@
       const k = U.clamp((p - S.a) / (S.b - S.a), 0, 1);
       const e = 1 - Math.pow(1 - k, 2.2);
       FX.crescentSet(a.cres, e);
+      if (a.fold) {
+        FX.crescentSet(a.fold.cres, e);
+        if (!a.fold.done && e >= 0.45) { a.hit.add(a.fold.e); foldHit(a.fold, heavy, 1); }
+      }
       const theta = U.lerp(S.th0, S.th1, e);
       const yawB = bladeYawBody(S, theta);
       if (a.prevYaw == null) a.prevYaw = bladeYawBody(S, S.th0);
       const lo = Math.min(a.prevYaw, yawB) - 0.12, hi = Math.max(a.prevYaw, yawB) + 0.12;
       const range = heavy ? P.TUNE.s2Range : P.TUNE.s1Range;
       for (const en of U.enemies.list) {
-        if (a.hit.has(en) || !en.alive) continue;
+        if (a.hit.has(en) || !en.alive || en.under) continue;
         const dx = en.pos.x - P.pos.x, dz = en.pos.z - P.pos.z;
         const d = Math.hypot(dx, dz);
         if (d > range + en.radius * 0.6) continue;
@@ -319,8 +330,106 @@
         }
       }
     }
-    if (a.swung && p > S.b + 0.02 && a.cres && !a.released) { a.released = true; FX.crescentRelease(a.cres); }
-    if (p >= 1) { if (a.cres && !a.released) FX.crescentRelease(a.cres); P.attack = null; P.comboTimer = 0; }
+    if (a.swung && p > S.b + 0.02 && a.cres && !a.released) {
+      a.released = true; FX.crescentRelease(a.cres);
+      if (a.fold) FX.crescentRelease(a.fold.cres);
+      // the reverse cut leaves the sword hanging in the air behind him; it swings again on its own
+      if (heavy) {
+        FX.ghostOf(P.rig.sword, { opacity: 0.6, hold: P.TUNE.echoDelay, dur: 0.25 });
+        echoes.push({ t: -P.TUNE.echoDelay, S, bodyM: a.bodyM, yaw: a.swingYaw, origin: P.pos.clone(), cres: null, fold: null, hit: new Set() });
+      }
+    }
+    if (p >= 1) {
+      if (a.cres && !a.released) { FX.crescentRelease(a.cres); if (a.fold) FX.crescentRelease(a.fold.cres); }
+      P.attack = null; P.comboTimer = 0;
+    }
+  }
+
+  // ---------------- the fold: distance is a suggestion ----------------
+  // The blade cuts the space next to him; the thing it was aimed at, however far, is in that space for an instant.
+  function foldFalloff(d) { return U.lerp(1, P.TUNE.foldMin, U.clamp((d - 2) / 12, 0, 1)); }
+  const _fm = new T.Matrix4(), _fw = new V3(), _fn = new V3();
+  function startFold(S, bodyM, yaw, heavy, mult) {
+    const Tn = P.TUNE, melee = heavy ? Tn.s2Range : Tn.s1Range;
+    let best = null, bs = Infinity, bd = 0;
+    for (const en of U.enemies.list) {
+      if (!en.alive || en.under) continue;
+      const dx = en.pos.x - P.pos.x, dz = en.pos.z - P.pos.z, d = Math.hypot(dx, dz);
+      if (d <= melee + en.radius * 0.6 || d > Tn.foldRange) continue;
+      const rel = Math.abs(U.angleDiff(yaw, Math.atan2(dx, dz)));
+      if (rel > Tn.foldCone) continue;
+      const s = Math.hypot(en.pos.x - P.aim.x, en.pos.z - P.aim.z) + rel * 4;
+      if (s < bs) { bs = s; best = en; bd = d; }
+    }
+    if (!best) return null;
+    const k = foldFalloff(bd) * mult;
+    U.dirFromAngle(yaw, _fw);
+    // the same crescent opens where the target stands
+    _fm.makeTranslation(best.pos.x - _fw.x * 1.05 - P.pos.x, 0, best.pos.z - _fw.z * 1.05 - P.pos.z).multiply(bodyM);
+    const cres = FX.crescent(S, _fm, heavy ? { inner: 0.3, outer: 1.7, bright: 0.55 + 0.6 * k, fadeTime: 0.2 } : { inner: 0.45, outer: 1.5, bright: 0.45 + 0.55 * k, fadeTime: 0.14 });
+    // a spectral copy of it is pulled up against the blade, where it is actually cut
+    _fn.set(P.pos.x + _fw.x * 1.2 - best.pos.x, 0, P.pos.z + _fw.z * 1.2 - best.pos.z);
+    FX.ghostOf(best.root, { offset: _fn, opacity: 0.42 * mult + 0.1, hold: 0.06, dur: 0.18, fadeIn: 0.04 });
+    U.audio.play('fold', { gap: 0.04 });
+    return { e: best, cres, k, done: false, mult };
+  }
+  function foldHit(f, heavy, mult) {
+    f.done = true;
+    const en = f.e;
+    if (!en.alive || en.under) return;
+    const dx = en.pos.x - P.pos.x, dz = en.pos.z - P.pos.z, d = Math.hypot(dx, dz) || 1;
+    const k = foldFalloff(d) * mult;
+    const dir = _tmp.set(dx / d, 0, dz / d);
+    U.enemies.hit(en, (heavy ? P.TUNE.s2Dmg : P.TUNE.s1Dmg) * k, { dir, knock: (heavy ? 3 : 1.5) * k });
+    const hp = _tmp2.set(en.pos.x, en.type === 'idol' ? 1.7 : 1.15, en.pos.z);
+    FX.sparks(hp, Math.round(8 + 10 * k), { speed: 6, dir, bias: 0.5, life: 0.3, size: 0.09, grav: 4 });
+    FX.shards(hp, 3, { bright: true, speed: 4, size: 0.07, life: 0.4, dir, bias: 0.4 });
+    FX.fracture(hp, 0.8 + 0.5 * k, 0.28);
+    FX.flash(hp, 8 * k, 5, 0.14);
+    // a hairline where space was folded shut between the blade and the wound
+    FX.seam(_fn.set(P.pos.x + dir.x * 1.3, 0, P.pos.z + dir.z * 1.3), en.pos, 0.09, 0.4);
+    U.audio.play('hit', { heavy, gap: 0.02 });
+    U.time.addHitstop((heavy ? 0.05 : 0.03) * (0.5 + 0.5 * k));
+    U.world.addShake((heavy ? 0.1 : 0.05) * k);
+  }
+
+  // ---------------- echo: the sword swings again without him ----------------
+  const echoes = [];
+  function updateEchoes(dt) {
+    for (let i = echoes.length - 1; i >= 0; i--) {
+      const ec = echoes[i];
+      ec.t += dt;
+      if (ec.t < 0) continue;
+      const S = ec.S, sw = S.dur * (S.b - S.a);
+      if (!ec.cres) {
+        ec.cres = FX.crescent(S, ec.bodyM, { inner: 0.25, outer: 1.78, bright: 0.75, fadeTime: 0.25 });
+        U.audio.play('swing2', { gap: 0.05 });
+        ec.fold = startFold(S, ec.bodyM, ec.yaw, true, P.TUNE.echoMult);
+      }
+      const e = 1 - Math.pow(1 - U.clamp(ec.t / sw, 0, 1), 2.2);
+      FX.crescentSet(ec.cres, e);
+      if (ec.fold) {
+        FX.crescentSet(ec.fold.cres, e);
+        if (!ec.fold.done && e >= 0.45) { ec.hit.add(ec.fold.e); foldHit(ec.fold, true, P.TUNE.echoMult); }
+      }
+      if (!ec.struck && e >= 0.5) {
+        ec.struck = true;
+        for (const en of U.enemies.list) {
+          if (ec.hit.has(en) || !en.alive || en.under) continue;
+          const dx = en.pos.x - ec.origin.x, dz = en.pos.z - ec.origin.z, d = Math.hypot(dx, dz);
+          if (d > P.TUNE.s2Range + en.radius * 0.6 || Math.abs(U.angleDiff(ec.yaw, Math.atan2(dx, dz))) > 1.35) continue;
+          ec.hit.add(en);
+          U.enemies.hit(en, P.TUNE.s2Dmg * P.TUNE.echoMult, { dir: _tmp.set(dx / (d || 1), 0, dz / (d || 1)), knock: 2 });
+          FX.sparks(_tmp2.set(en.pos.x, 1.15, en.pos.z), 10, { speed: 5, life: 0.3, size: 0.08, grav: 3 });
+          U.audio.play('hit', { gap: 0.02 });
+        }
+      }
+      if (ec.t >= sw + 0.02) {
+        FX.crescentRelease(ec.cres);
+        if (ec.fold) FX.crescentRelease(ec.fold.cres);
+        echoes.splice(i, 1);
+      }
+    }
   }
 
   function landHit(en, heavy, nx, nz) {

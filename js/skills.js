@@ -30,18 +30,20 @@
 
   // ---------------- shared builders ----------------
   const SLIT_FS = `
+#define sq(x) ((x)*(x))
     uniform float uOpen, uOpacity; varying vec2 vUv;
     void main(){
       vec2 p = vUv * 2.0 - 1.0;
       float w = uOpen * 0.22 * pow(max(1.0 - p.y * p.y, 0.0), 1.5);   // thin lens, long axis along local Y, sharp tips
       float d = abs(p.x) - w;
-      float edge = exp(-pow(d / 0.035, 2.0)) * (1.0 - smoothstep(0.7, 1.0, abs(p.y)));
+      float edge = exp(-sq(d / 0.035)) * (1.0 - smoothstep(0.7, 1.0, abs(p.y)));
       float core = (1.0 - smoothstep(-0.02, 0.0, d)) * step(0.004, w);   // dark interior, only inside the lens
       float a = clamp(edge + core * 0.85, 0.0, 1.0) * uOpacity;
       if (a < 0.004) discard;
       gl_FragColor = vec4(vec3(2.8, 2.85, 3.1) * edge, a);
     }`;
   const TEAR_FS = `
+#define sq(x) ((x)*(x))
     uniform float uOpen, uOpacity, uHead; varying vec2 vUv;
     void main(){
       float along = vUv.x;
@@ -49,15 +51,16 @@
       float taper = sin(along * 3.14159);
       float w = uOpen * taper;
       float d = abs(vUv.y - 0.5) * 2.0 - w;
-      float edge = exp(-pow(d / 0.12, 2.0)) * step(0.001, w);
+      float edge = exp(-sq(d / 0.12)) * step(0.001, w);
       float inside = step(d, 0.0);
       float a = clamp(edge + inside, 0.0, 1.0) * uOpacity;
       if (a < 0.003) discard;
       gl_FragColor = vec4(vec3(2.4, 2.45, 2.7) * edge, a);
     }`;
   const FIELD_FS = `
+#define sq(x) ((x)*(x))
     uniform float uR, uAlpha, uSpin, uTime; varying vec2 vP;
-    float band(float d, float r, float w){ return exp(-pow((d - r) / w, 2.0)); }
+    float band(float d, float r, float w){ return exp(-sq((d - r) / w)); }
     void main(){
       float d = length(vP);
       float a = atan(vP.y, vP.x);
@@ -73,7 +76,7 @@
       float ha = uSpin * 0.55;
       vec2 hd = vec2(cos(ha), sin(ha));
       float along = dot(vP, hd);
-      float hand = exp(-pow(abs(vP.x * hd.y - vP.y * hd.x) / 0.03, 2.0)) * step(0.0, along) * step(along, uR * 0.74);
+      float hand = exp(-sq(abs(vP.x * hd.y - vP.y * hd.x) / 0.03)) * step(0.0, along) * step(along, uR * 0.74);
       float fill = 0.045 * (1.0 - smoothstep(uR - 0.1, uR, d)) * (0.7 + 0.3 * sin(d * 6.0 - uTime * 1.5));
       float al = (r1 * 0.95 + r2 * 0.7 + r3 * 0.55 + r4 * 0.25 + tick * 0.6 + hand * 0.75 + fill) * uAlpha;
       if (al < 0.003) discard;
@@ -109,13 +112,17 @@
     const trailGeo = new T.PlaneGeometry(1, 1); trailGeo.translate(0, -0.5, 0); trailGeo.rotateX(-Math.PI / 2); // flat ribbon spanning local z 0..1
     S.lanceTrail = new T.Mesh(trailGeo, new T.ShaderMaterial({
       uniforms: { uOpacity: { value: 1 } }, vertexShader: QUAD_VS,
-      fragmentShader: `uniform float uOpacity; varying vec2 vUv; void main(){ float a = pow(vUv.y, 1.5) * (1.0 - pow(abs(vUv.x * 2.0 - 1.0), 2.0)); gl_FragColor = vec4(vec3(2.2, 2.25, 2.5), a * uOpacity); }`,
+      fragmentShader: `
+#define sq(x) ((x)*(x))
+uniform float uOpacity; varying vec2 vUv; void main(){ float a = pow(vUv.y, 1.5) * (1.0 - sq(abs(vUv.x * 2.0 - 1.0))); gl_FragColor = vec4(vec3(2.2, 2.25, 2.5), a * uOpacity); }`,
       transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide,
     }));
     S.lanceTrail.visible = false; S.lanceTrail.renderOrder = 9; scene.add(S.lanceTrail);
     S.groundLine = new T.Mesh(new T.PlaneGeometry(1, 1), new T.ShaderMaterial({
       uniforms: { uOpacity: { value: 0 } }, vertexShader: QUAD_VS,
-      fragmentShader: `uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-pow((vUv.x - 0.5) / 0.18, 2.0)) * smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.85, vUv.y); gl_FragColor = vec4(vec3(1.5, 1.52, 1.65), a * uOpacity); }`,
+      fragmentShader: `
+#define sq(x) ((x)*(x))
+uniform float uOpacity; varying vec2 vUv; void main(){ float a = exp(-sq((vUv.x - 0.5) / 0.18)) * smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.85, vUv.y); gl_FragColor = vec4(vec3(1.5, 1.52, 1.65), a * uOpacity); }`,
       transparent: true, depthWrite: false, blending: T.AdditiveBlending,
     }));
     S.groundLine.rotation.x = -Math.PI / 2; S.groundLine.visible = false; S.groundLine.renderOrder = 3; scene.add(S.groundLine);

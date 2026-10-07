@@ -14,11 +14,12 @@
   // ---------------- Ground ring / disc shader ----------------
   const RING_VS = `varying vec2 vP; uniform float uSize; void main(){ vP = (uv * 2.0 - 1.0) * uSize; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
   const RING_FS = `
+#define sq(x) ((x)*(x))
     uniform float uR, uW, uOpacity, uFill, uInnerFade; uniform vec3 uColor;
     varying vec2 vP;
     void main(){
       float d = length(vP);
-      float ring = exp(-pow((d - uR) / max(uW, 0.001), 2.0));
+      float ring = exp(-sq((d - uR) / max(uW, 0.001)));
       float fill = uFill * smoothstep(uR, uR - uInnerFade, d);
       float a = clamp(ring + fill, 0.0, 1.0) * uOpacity;
       if (a < 0.002) discard;
@@ -314,6 +315,7 @@
       uniforms: { uOpacity: { value: 1 }, uHead: { value: 1 }, uTail: { value: 0 }, uColor: { value: new T.Color(2.4, 2.45, 2.6) }, uEdgeDark: { value: 0.0 } },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: `
+#define sq(x) ((x)*(x))
         uniform float uOpacity, uHead, uTail; uniform vec3 uColor;
         varying vec2 vUv;
         void main(){
@@ -322,7 +324,7 @@
           // brightest along the outer (tip) edge, with a thin hot core line
           float v = vUv.y;
           float edge = smoothstep(0.0, 0.85, v) * (1.0 - smoothstep(0.93, 1.0, v));
-          float core = exp(-pow((v - 0.86) / 0.05, 2.0));
+          float core = exp(-sq((v - 0.86) / 0.05));
           float a = (edge * 0.55 + core * 0.9) * body * uOpacity;
           if (a < 0.003) discard;
           gl_FragColor = vec4(uColor * (0.6 + core * 0.9), a);
@@ -406,6 +408,7 @@
 
   // ---------------- Telegraphs (enemy warnings) ----------------
   const TELE_FS = `
+#define sq(x) ((x)*(x))
     uniform float uR, uHalf, uProgress, uOpacity, uLocked, uTime; uniform vec3 uColor; uniform float uMode;
     varying vec2 vP;
     void main(){
@@ -414,14 +417,14 @@
       float inSector = 1.0 - smoothstep(uHalf - 0.02, uHalf + 0.02, abs(ang));
       if (uMode < 0.5) inSector = 1.0;
       float inside = (1.0 - smoothstep(uR - 0.03, uR, d)) * inSector;
-      float outline = exp(-pow((d - uR) / 0.045, 2.0)) * inSector;
+      float outline = exp(-sq((d - uR) / 0.045)) * inSector;
       if (uMode > 0.5) {
         float sideD = abs(abs(ang) - uHalf) * d;
-        outline += exp(-pow(sideD / 0.04, 2.0)) * (1.0 - smoothstep(uR, uR + 0.05, d)) * step(0.15, d);
+        outline += exp(-sq(sideD / 0.04)) * (1.0 - smoothstep(uR, uR + 0.05, d)) * step(0.15, d);
       }
       float front = uProgress * uR;
       float fill = inside * (1.0 - smoothstep(front - 0.02, front, d)) * 0.2;
-      float frontLine = inside * exp(-pow((d - front) / 0.05, 2.0)) * 0.7;
+      float frontLine = inside * exp(-sq((d - front) / 0.05)) * 0.7;
       float pulse = 0.85 + 0.15 * sin(uTime * 18.0);
       float a = (outline * (0.55 + 0.45 * uLocked) * pulse + fill + frontLine + inside * 0.035) * uOpacity;
       if (a < 0.003) discard;

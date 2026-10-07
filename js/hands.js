@@ -135,13 +135,14 @@
       vViewPos = mvPosition.xyz;
     }`;
   const HAND_FS = `
+#define sq(x) ((x)*(x))
     uniform vec3 uColor; uniform float uOpacity; uniform float uCore; uniform float uEdge; uniform float uGlow;
     varying vec3 vViewPos; varying float vFade;
     void main() {
       vec3 n = normalize(cross(dFdx(vViewPos), dFdy(vViewPos)));
       vec3 v = normalize(-vViewPos);
       float ndv = abs(dot(n, v));
-      float fres = pow(1.0 - ndv, 2.0);
+      float fres = sq(1.0 - ndv);
       float facet = 0.4 + 0.6 * clamp(n.y * 0.55 + n.x * 0.3 + 0.5, 0.0, 1.0);
       float a = uOpacity * vFade * clamp(uCore * facet + fres * uEdge, 0.0, 1.0);
       vec3 col = uColor * uGlow * (0.5 + 0.65 * facet + fres * 1.5);

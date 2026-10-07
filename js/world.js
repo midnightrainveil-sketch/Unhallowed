@@ -159,6 +159,7 @@
           gl_Position = p.xyww;
         }`,
       fragmentShader: `
+#define sq(x) ((x)*(x))
         uniform vec3 uEclipse; uniform float uTime; uniform float uDim;
         varying vec3 vDir;
         float hash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -174,7 +175,7 @@
           vec3 cDeep = vec3(0.045, 0.046, 0.054);
           vec3 cMist = vec3(0.26, 0.268, 0.30);
           vec3 cHigh = vec3(0.016, 0.016, 0.02);
-          float band = exp(-pow((h + 0.16) / 0.30, 2.0));
+          float band = exp(-sq((h + 0.16) / 0.30));
           vec3 col = mix(cDeep, cMist, band);
           col = mix(col, cHigh, smoothstep(0.02, 0.45, h));
           float cl = fbm(d * 3.2 + vec3(uTime * 0.004, 0.0, uTime * 0.0025));
@@ -191,7 +192,7 @@
           col += vec3(0.84, 0.86, 0.94) * glow * (0.55 + 0.6 * cl2);
           // swirling cloud ring hugging the eclipse
           float swirl = fbm(vec3(th * 2.0, ang * 22.0 - uTime * 0.02, 1.7));
-          col += vec3(0.55, 0.56, 0.62) * smoothstep(0.55, 0.8, swirl) * exp(-pow((ang - R * 1.9) / (R * 0.8), 2.0)) * 0.35;
+          col += vec3(0.55, 0.56, 0.62) * smoothstep(0.55, 0.8, swirl) * exp(-sq((ang - R * 1.9) / (R * 0.8))) * 0.35;
           col *= 1.0 - uDim * 0.55;
           gl_FragColor = vec4(col, 1.0);
         }`,
@@ -214,6 +215,7 @@
       uniforms: { uTime: U.shared.uTime, uDim: { value: 0 } },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: `
+#define sq(x) ((x)*(x))
         uniform float uTime, uDim; varying vec2 vUv;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
         float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -227,11 +229,11 @@
           float glow = exp(-off * 1.6) * 0.32 + exp(-off * 6.0) * 0.55;
           glow *= 0.6 + 0.6 * n;
           float brk = smoothstep(0.03, 0.12, abs(sin(th * 2.5 + 0.9))) * smoothstep(0.02, 0.08, abs(sin(th * 4.0 - 1.3)));
-          float ring = (exp(-pow((d - 1.0) / 0.018, 2.0)) * 9.0 + exp(-pow((d - 1.0) / 0.07, 2.0)) * 1.4) * mix(0.15, 1.0, brk);
-          float a1 = exp(-pow((d - 1.55) / 0.012, 2.0)) * step(0.32, fract(th / 6.2832 * 3.0 + 0.1));
-          float a2 = exp(-pow((d - 2.2) / 0.011, 2.0)) * step(0.45, fract(th / 6.2832 * 5.0 + 0.35));
-          float a3 = exp(-pow((d - 3.0) / 0.016, 2.0)) * step(0.22, fract(th / 6.2832 * 2.0 + 0.62));
-          float spokes = exp(-pow(fract(th / 6.2832 * 16.0) - 0.5, 2.0) / 0.0005) * smoothstep(1.6, 1.7, d) * (1.0 - smoothstep(2.1, 2.2, d));
+          float ring = (exp(-sq((d - 1.0) / 0.018)) * 9.0 + exp(-sq((d - 1.0) / 0.07)) * 1.4) * mix(0.15, 1.0, brk);
+          float a1 = exp(-sq((d - 1.55) / 0.012)) * step(0.32, fract(th / 6.2832 * 3.0 + 0.1));
+          float a2 = exp(-sq((d - 2.2) / 0.011)) * step(0.45, fract(th / 6.2832 * 5.0 + 0.35));
+          float a3 = exp(-sq((d - 3.0) / 0.016)) * step(0.22, fract(th / 6.2832 * 2.0 + 0.62));
+          float spokes = exp(-sq(fract(th / 6.2832 * 16.0) - 0.5) / 0.0005) * smoothstep(1.6, 1.7, d) * (1.0 - smoothstep(2.1, 2.2, d));
           float fade = 1.0 - smoothstep(${(S * 0.82).toFixed(2)}, ${S.toFixed(2)}, d);
           vec3 light = vec3(0.86, 0.88, 0.96) * glow + vec3(1.0, 1.0, 1.05) * ring + vec3(0.92, 0.94, 1.0) * (a1 * 2.4 + a2 * 1.7 + a3 * 1.3 + spokes * 0.9);
           light *= fade * (1.0 - uDim * 0.5);
